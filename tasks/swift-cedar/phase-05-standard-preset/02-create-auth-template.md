@@ -38,4 +38,4 @@ Create the `templates/auth/` directory with a Cognito Lambda authorizer and the 
 Medium -- JWT validation logic and CDK Cognito constructs
 
 ## Status
-- [ ] Not Started
+- [x] Complete

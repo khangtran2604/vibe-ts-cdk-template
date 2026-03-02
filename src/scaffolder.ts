@@ -112,15 +112,26 @@ function buildWorkspaceYaml(entries: string[]): string {
  * - "infra"       → projectDir/infra/       (workspace member: infra)
  * - "dev-gateway" → projectDir/dev-gateway/ (workspace member: dev-gateway)
  * - "packages"    → projectDir/packages/    (workspace glob: packages/*)
+ * - "frontend"    → projectDir/frontend/    (workspace member: frontend)
+ * - "auth"        → projectDir/auth/        (workspace member: auth)
+ * - "e2e"         → projectDir/e2e/         (workspace member: e2e)
  *
- * Template directories NOT in this set (base, frontend, auth, e2e, database,
- * cicd, monitoring, extras) are merged directly into the project root so their
- * contents appear at the correct top-level paths.
+ * Template directories NOT in this set (base, database, cicd, monitoring,
+ * extras) are merged directly into the project root so their contents appear
+ * at the correct top-level paths.
  *
  * Expressed as a module-level constant so future additions are trivial and
  * the set is only allocated once across all scaffold() invocations.
  */
-const SUBDIR_TEMPLATE_DIRS = new Set(["services", "infra", "dev-gateway", "packages"]);
+const SUBDIR_TEMPLATE_DIRS = new Set([
+  "services",
+  "infra",
+  "dev-gateway",
+  "packages",
+  "frontend",
+  "auth",
+  "e2e",
+]);
 
 // ---------------------------------------------------------------------------
 // Public API

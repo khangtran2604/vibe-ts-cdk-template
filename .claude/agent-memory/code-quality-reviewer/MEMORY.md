@@ -14,41 +14,38 @@
 - `pnpm-workspace.yaml` must be built programmatically, not templated
 - Template dotfiles use `_` prefix (e.g., `_gitignore` -> `.gitignore`)
 - Stack-per-service CDK pattern; each service gets its own API Gateway
+- All files with `{{variable}}` placeholders MUST use `.hbs` extension
 
 ## Template Processing Pipeline
-- Regex: `/^\/\/ @feature:(\w+) (.*)$/` -- group 1 is feature name, group 2 is the code to keep
-- ONLY `.hbs` files get `{{variable}}` substitution; plain `.ts`/`.json` files copied as-is
-- Binary files copied byte-for-byte (no transforms)
-- Common mistake: putting `{{projectName}}` in `.ts` files instead of `.ts.hbs`
+- `replaceVariables()` is called on ALL non-binary text files (not just .hbs)
+- `.hbs` suffix is stripped during `renameFile()` -- it's a naming convention, not a processing gate
+- Regex: `/^(\s*)\/\/ @feature:(\w+) (.*)$/` -- supports indented annotations
+- Binary files (svg, png, etc.) copied byte-for-byte (no transforms)
+- Path traversal protection built into `copyDir()`
 
-## Recurring Issues (flagged across Phase 1-3 reviews)
-- `CLI_VERSION` in constants.ts duplicated from package.json
-- Commander always defines `rds`, `git`, `install`, `yes` -- CliFlags marks optional
-- `noExternal: []` in tsup.config.ts is a no-op
-- Missing: dedicated unit tests for scaffolder.ts, git.ts, pnpm.ts
-- `initGit`/`installDeps` are `async` but use `execSync` (sync)
-- `execSync` calls lack `timeout` option
-- Unused imports in fs.ts: `basename`, `stat`
+## CDK Stack Conventions (from base-stack.ts)
+- All stacks extend `ServiceStack` which extends `cdk.Stack`
+- `this.config.lambdaMemoryMb` / `this.config.lambdaTimeoutSecs` for Lambda config
+- `this.removalPolicy` (DESTROY for dev, RETAIN for prod)
+- `this.logRetention()` maps `logRetentionDays` to CDK enum
+- `this.resourceName("prefix")` adds `-<stage>` suffix
+- Runtime: `lambda.Runtime.NODEJS_22_X`
 
-## Phase 4 Issues Found
-- **CRITICAL**: `!this.stage === "prod"` operator precedence bug in CDK stacks
-- `{{projectName}}` in plain `.ts` test files -- substitution skipped
-- `source-map-support/register` imported but not in dependencies
-- HealthStack hardcodes ONE_WEEK retention vs UsersStack uses config-driven
-- Infra package.json uses CJS (`ts-node`) but rest of project is ESM
+## Recurring Issues (flagged across reviews)
+- Phase 1-3: `CLI_VERSION` duplicated from package.json; `noExternal: []` no-op; `execSync` lacks timeout
+- Phase 4: `!this.stage === "prod"` operator precedence bug; `source-map-support/register` missing dep
+- Phase 5: auth-stack hardcodes memorySize/timeout; SUBDIR_TEMPLATE_DIRS comment stale; e2e title mismatch
 
 ## File Layout
-- `src/index.ts` -- CLI entry point (commander setup)
-- `src/types.ts` -- ProjectConfig, Preset, FeatureFlags
-- `src/scaffolder.ts` -- core scaffolding engine
-- `src/template-helpers.ts` -- feature flags to template mapping
-- `src/utils/` -- fs, git, pnpm, logger helpers
-- `templates/` -- template files for generated projects
-- `test/` -- CLI tests (vitest)
+- `src/scaffolder.ts` -- core scaffolding engine, SUBDIR_TEMPLATE_DIRS set
+- `src/template-helpers.ts` -- getTemplateDirs, getVariableMap, getWorkspaceEntries
+- `src/utils/fs.ts` -- copyDir, renameFile, replaceVariables, processConditionals
+- `templates/infra/src/stacks/base-stack.ts` -- ServiceStack base class
 
 ## Test Patterns
 - `vi.hoisted()` for mock data referenced in `vi.mock()` factories
-- `vi.mock("@clack/prompts")` replaces all clack functions with spies
+- `vi.stubEnv()` for module-level env var guards
+- Dynamic `await import()` after vi.mock/vi.stubEnv for modules with top-level side effects
 - `copyDir` integration tests use real temp dirs
 
 ## Package Versions

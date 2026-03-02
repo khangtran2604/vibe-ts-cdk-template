@@ -1,0 +1,156 @@
+import * as cdk from "aws-cdk-lib";
+import * as s3 from "aws-cdk-lib/aws-s3";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
+import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
+import * as s3deploy from "aws-cdk-lib/aws-s3-deployment";
+import type { Construct } from "constructs";
+import { ServiceStack, type ServiceStackProps } from "../base-stack";
+import * as path from "path";
+
+/**
+ * FrontendStack — deploys the Vite React app as a static site.
+ *
+ * Resources created:
+ * - S3 bucket: private, stores compiled frontend assets
+ * - CloudFront distribution: CDN fronting the S3 bucket via OAC
+ * - BucketDeployment: syncs `frontend/dist` into the bucket and invalidates the CDN
+ *
+ * Architecture:
+ *   Browser → CloudFront → S3 (private, OAC-signed requests)
+ *
+ * SPA routing is handled by mapping 403/404 errors back to /index.html
+ * so that React Router can process the URL client-side.
+ */
+export class FrontendStack extends ServiceStack {
+  /** The https:// URL of the CloudFront distribution */
+  public readonly distributionUrl: string;
+
+  constructor(scope: Construct, id: string, props: ServiceStackProps) {
+    super(scope, id, props);
+
+    // -------------------------------------------------------------------------
+    // S3 bucket — private, only reachable via CloudFront OAC
+    //
+    // blockPublicAccess: BLOCK_ALL ensures no bucket policy or ACL can expose
+    // objects directly. CloudFront will use OAC (SigV4-signed requests) instead.
+    // -------------------------------------------------------------------------
+    const bucket = new s3.Bucket(this, "FrontendBucket", {
+      bucketName: this.resourceName("{{projectName}}-frontend"),
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      // Object Ownership: BUCKET_OWNER_ENFORCED is required for OAC
+      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+      // Automatically delete bucket contents and the bucket itself in dev.
+      // RETAIN in staging/prod protects against accidental data loss.
+      autoDeleteObjects: this.config.isDev,
+      removalPolicy: this.removalPolicy,
+      // Encrypt objects at rest using the default S3-managed key (SSE-S3).
+      // Switch to KMS if you need customer-managed key rotation.
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+    });
+
+    // -------------------------------------------------------------------------
+    // CloudFront distribution
+    //
+    // S3BucketOrigin.withOriginAccessControl() is the modern OAC approach
+    // (replaces the deprecated OAI / S3Origin pattern). It automatically:
+    //   1. Creates an AWS::CloudFront::OriginAccessControl resource
+    //   2. Updates the S3 bucket policy to allow CloudFront to read objects
+    // -------------------------------------------------------------------------
+    const distribution = new cloudfront.Distribution(
+      this,
+      "FrontendDistribution",
+      {
+        comment: `{{projectName}} frontend — ${this.stage}`,
+        defaultRootObject: "index.html",
+        defaultBehavior: {
+          origin: origins.S3BucketOrigin.withOriginAccessControl(bucket),
+          // Redirect HTTP to HTTPS — no exceptions
+          viewerProtocolPolicy:
+            cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          // Cache-busted assets (hashed filenames from Vite) benefit from
+          // aggressive caching; the default policy is sufficient here.
+          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          // Security headers: HSTS, X-Content-Type-Options, X-Frame-Options, etc.
+          responseHeadersPolicy:
+            cloudfront.ResponseHeadersPolicy
+              .CORS_ALLOW_ALL_ORIGINS_AND_SECURITY_HEADERS,
+          // Compress assets (gzip/brotli) at the edge for faster delivery
+          compress: true,
+        },
+        // SPA routing — React Router handles paths client-side.
+        // Return index.html for 403 (S3 returns this for missing keys) and 404.
+        errorResponses: [
+          {
+            httpStatus: 403,
+            responseHttpStatus: 200,
+            responsePagePath: "/index.html",
+            // Short TTL: avoids caching stale 403s from CloudFront edge nodes
+            ttl: cdk.Duration.seconds(0),
+          },
+          {
+            httpStatus: 404,
+            responseHttpStatus: 200,
+            responsePagePath: "/index.html",
+            ttl: cdk.Duration.seconds(0),
+          },
+        ],
+        // Geo-restriction: omitted → CloudFront serves all geographies by default.
+        // Add cloudfront.GeoRestriction.allowlist("US", "CA", ...) to restrict.
+        priceClass: this.config.isDev
+          ? // US/EU only — cheaper for development environments
+            cloudfront.PriceClass.PRICE_CLASS_100
+          : // Global edge network — recommended for production traffic
+            cloudfront.PriceClass.PRICE_CLASS_ALL,
+        // Enable access logging in prod for auditing CloudFront requests
+        enableLogging: !this.config.isDev,
+      }
+    );
+
+    // -------------------------------------------------------------------------
+    // BucketDeployment — syncs the Vite build output to S3
+    //
+    // The path resolves relative to the compiled CDK app entry point
+    // (dist/index.js, one level below the infra workspace root).
+    // After upload, CloudFront paths are invalidated so edge caches are cleared.
+    // -------------------------------------------------------------------------
+    new s3deploy.BucketDeployment(this, "FrontendDeployment", {
+      sources: [
+        s3deploy.Source.asset(
+          path.resolve(__dirname, "../../../../frontend/dist")
+        ),
+      ],
+      destinationBucket: bucket,
+      // Invalidate all cached paths on every deployment so users always
+      // receive the freshly built assets. Wildcard invalidations count
+      // as a single invalidation path for CloudFront billing purposes.
+      distribution,
+      distributionPaths: ["/*"],
+      // Run the deployment in the same region as the stack
+      memoryLimit: 256,
+    });
+
+    // -------------------------------------------------------------------------
+    // Stack outputs
+    // -------------------------------------------------------------------------
+    this.distributionUrl = `https://${distribution.distributionDomainName}`;
+
+    new cdk.CfnOutput(this, "DistributionUrl", {
+      value: this.distributionUrl,
+      description: "CloudFront distribution URL for the {{projectName}} frontend",
+      exportName: `{{projectName}}-DistributionUrl-${this.stage}`,
+    });
+
+    new cdk.CfnOutput(this, "DistributionId", {
+      value: distribution.distributionId,
+      description: "CloudFront distribution ID (use for manual cache invalidations)",
+      exportName: `{{projectName}}-DistributionId-${this.stage}`,
+    });
+
+    new cdk.CfnOutput(this, "FrontendBucketName", {
+      value: bucket.bucketName,
+      description: "S3 bucket name for {{projectName}} frontend assets",
+      exportName: `{{projectName}}-FrontendBucketName-${this.stage}`,
+    });
+  }
+}

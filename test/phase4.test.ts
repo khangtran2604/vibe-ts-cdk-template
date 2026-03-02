@@ -1,14 +1,17 @@
 /**
- * Phase 4 — SUBDIR_TEMPLATE_DIRS expansion tests.
+ * Phase 4/5 — SUBDIR_TEMPLATE_DIRS expansion tests.
  *
  * Phase 4 expanded SUBDIR_TEMPLATE_DIRS in scaffolder.ts from
  *   new Set(["services"])
  * to
  *   new Set(["services", "infra", "dev-gateway", "packages"])
  *
- * This file verifies that all four subdirectory template dirs are correctly
- * placed inside a same-named subdirectory of the project root rather than
- * being merged into the root itself.
+ * Phase 5 further expanded it to include feature-gated workspace members:
+ *   new Set(["services", "infra", "dev-gateway", "packages", "frontend", "auth", "e2e"])
+ *
+ * This file verifies that all subdirectory template dirs are correctly placed
+ * inside a same-named subdirectory of the project root rather than being
+ * merged into the root itself.
  *
  * Companion file test/phase4-templates.test.ts covers template file existence
  * and .hbs naming conventions (it uses the real filesystem; this file mocks
@@ -335,7 +338,10 @@ describe("SUBDIR_TEMPLATE_DIRS — 'services' placement (regression guard)", () 
 // ---------------------------------------------------------------------------
 
 describe("SUBDIR_TEMPLATE_DIRS — root-only dirs stay at project root", () => {
-  it.each(["base", "frontend", "auth", "e2e", "database", "cicd", "monitoring", "extras"])(
+  // "frontend", "auth", "e2e" are no longer root-only — they were moved into
+  // SUBDIR_TEMPLATE_DIRS in Phase 5 so they land in their own workspace
+  // subdirectory (e.g. projectDir/frontend/).
+  it.each(["base", "database", "cicd", "monitoring", "extras"])(
     "should copy '%s' directly into the project root",
     async (dir) => {
       mockGetTemplateDirs.mockReturnValue([dir]);
@@ -348,6 +354,56 @@ describe("SUBDIR_TEMPLATE_DIRS — root-only dirs stay at project root", () => {
       expect(endsWithSegment(call.dest, "my-app", dir)).toBe(false);
     }
   );
+});
+
+// ---------------------------------------------------------------------------
+// Phase 5: "frontend", "auth", "e2e" → projectDir/<dir>
+// ---------------------------------------------------------------------------
+
+describe("SUBDIR_TEMPLATE_DIRS — Phase 5 feature dirs placed in subdirectories", () => {
+  it.each(["frontend", "auth", "e2e"])(
+    "should copy '%s' into projectDir/%s, not the project root",
+    async (dir) => {
+      mockGetTemplateDirs.mockReturnValue([dir]);
+
+      await scaffold(makeConfig({ projectName: "my-app" }));
+
+      const [call] = collectCopyCalls();
+      expect(endsWithSegment(call.dest, "my-app", dir)).toBe(true);
+    }
+  );
+
+  it.each(["frontend", "auth", "e2e"])(
+    "should NOT merge '%s' directly into the project root",
+    async (dir) => {
+      mockGetTemplateDirs.mockReturnValue([dir]);
+
+      await scaffold(makeConfig({ projectName: "my-app" }));
+
+      const [call] = collectCopyCalls();
+      // Must end with "my-app/<dir>", NOT just "my-app".
+      expect(endsWithSegment(call.dest, "my-app")).toBe(false);
+    }
+  );
+
+  it("should copy 'frontend', 'auth', and 'e2e' into same-named subdirs in a combined run", async () => {
+    const featureDirs = ["frontend", "auth", "e2e"];
+    mockGetTemplateDirs.mockReturnValue(featureDirs);
+
+    await scaffold(makeConfig({ projectName: "std-app" }));
+
+    const calls = collectCopyCalls();
+    for (const dir of featureDirs) {
+      const match = calls.find(
+        (c) => c.src.endsWith(`/${dir}`) || c.src.endsWith(`\\${dir}`)
+      );
+      expect(match, `copyDir call for '${dir}' not found`).toBeDefined();
+      expect(
+        endsWithSegment(match!.dest, "std-app", dir),
+        `'${dir}' should be in projectDir/${dir}, got: ${match!.dest}`
+      ).toBe(true);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -393,8 +449,16 @@ describe("SUBDIR_TEMPLATE_DIRS — minimal preset full run", () => {
     expect(endsWithSegment(infraCall!.dest, "my-app", "infra")).toBe(true);
   });
 
-  it("should place all four SUBDIR dirs in same-named subdirectories within the same run", async () => {
-    const subdirDirs = ["infra", "services", "dev-gateway", "packages"];
+  it("should place all seven SUBDIR dirs in same-named subdirectories within the same run", async () => {
+    const subdirDirs = [
+      "infra",
+      "services",
+      "dev-gateway",
+      "packages",
+      "frontend",
+      "auth",
+      "e2e",
+    ];
     mockGetTemplateDirs.mockReturnValue(subdirDirs);
 
     await scaffold(makeConfig({ projectName: "proj" }));

@@ -1,0 +1,74 @@
+import { defineConfig, devices } from "@playwright/test";
+
+/**
+ * Playwright configuration for end-to-end tests.
+ *
+ * Tests run against the frontend dev server (Vite on port 5173).
+ * The `webServer` block automatically starts the frontend before the test
+ * suite and shuts it down afterwards, so you do not need to start it manually.
+ *
+ * @see https://playwright.dev/docs/test-configuration
+ */
+export default defineConfig({
+  testDir: "./tests",
+
+  /** Run each test file in parallel */
+  fullyParallel: true,
+
+  /** Fail the build on CI if you accidentally left test.only in the source */
+  forbidOnly: !!process.env["CI"],
+
+  /** Retry failed tests once on CI only */
+  retries: process.env["CI"] ? 1 : 0,
+
+  /** Limit parallel workers on CI to avoid resource contention */
+  workers: process.env["CI"] ? 2 : undefined,
+
+  reporter: [
+    ["list"],
+    ["html", { open: "never" }],
+  ],
+
+  use: {
+    /** Base URL so tests can use relative paths: await page.goto("/") */
+    baseURL: "http://localhost:5173",
+
+    /** Capture trace on first retry of failed tests */
+    trace: "on-first-retry",
+
+    /** Capture screenshot on failure */
+    screenshot: "only-on-failure",
+  },
+
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "firefox",
+      use: { ...devices["Desktop Firefox"] },
+    },
+    {
+      name: "webkit",
+      use: { ...devices["Desktop Safari"] },
+    },
+  ],
+
+  /**
+   * Automatically start the frontend dev server before the test suite.
+   * The server is stopped when all tests have finished.
+   *
+   * `reuseExistingServer: true` means Playwright will skip starting a new
+   * server if something is already listening on the port — handy when you're
+   * running `pnpm dev` in a separate terminal.
+   */
+  webServer: {
+    command: "pnpm --filter @{{projectName}}/frontend dev",
+    url: "http://localhost:5173",
+    reuseExistingServer: !process.env["CI"],
+    timeout: 60_000,
+    stdout: "pipe",
+    stderr: "pipe",
+  },
+});

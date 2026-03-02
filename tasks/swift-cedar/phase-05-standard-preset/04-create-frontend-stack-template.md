@@ -34,4 +34,4 @@ Create the CDK frontend stack that deploys the Vite React app using AWS Amplify 
 Medium -- CDK Amplify constructs with stage-based configuration
 
 ## Status
-- [ ] Not Started
+- [x] Complete

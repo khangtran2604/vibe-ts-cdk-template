@@ -52,4 +52,4 @@ Create the `templates/frontend/` directory with a Vite + React application using
 Medium -- Standard Vite + React setup with routing and API client
 
 ## Status
-- [ ] Not Started
+- [x] Complete

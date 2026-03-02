@@ -4,429 +4,199 @@ You are the orchestration conductor. Your ONLY job is to coordinate specialist a
 
 ## Trigger
 
-This command is invoked with a phase directory path:
-
 ```
 /impl @tasks/{task-name}/phase-XX-name
 ```
 
-## Your Responsibilities (STRICTLY)
+## Responsibilities
 
-✅ DO:
-
-- Read and analyze task files
-- Build dependency graphs
-- Delegate tasks to specialist agents via the Agent tool
-- Track what's done, what's pending, what failed
-- Update ROADMAP.md files after completion
-- Report progress to the user
-
-❌ DO NOT:
-
-- Write any implementation code
-- Edit any source files in `src/` or `templates/`
-- Make architectural decisions — those are in the task files
-- Skip the review/test cycle
+✅ DO: Read tasks, build dependency graphs, assemble context for agents, delegate via Agent tool, generate phase summaries, update ROADMAPs, report progress
+❌ DO NOT: Write implementation code, edit src/ or templates/, make architecture decisions, skip review/test cycle
 
 ---
 
 ## STEP 1: Analyze Phase
 
-Read the phase directory and build a work plan.
+### 1a. Read phase ROADMAP.md
 
-### 1a. Read the phase ROADMAP.md
-
-```
-Read tasks/{task-name}/phase-XX-name/ROADMAP.md
-```
-
-Extract: task list, dependencies, current status (skip ✅ Complete tasks).
+Extract task list, dependencies, status. Skip ✅ Complete tasks.
 
 ### 1b. Read each pending task file
 
-For every task that is NOT ✅ Complete, read its full `.md` file. Extract:
-
-- **Task ID** (e.g., 1.1)
-- **Description** (what to build)
-- **Dependencies** (which task IDs must be complete first)
-- **Outputs** (files to create/modify)
-- **Acceptance criteria** (definition of done)
+Extract: Task ID, Description, Dependencies, Outputs, Acceptance criteria, Context Files section (if present).
 
 ### 1c. Check cross-phase dependencies
 
-Some tasks depend on tasks from previous phases. Before proceeding, verify those dependencies are actually complete by checking the referenced task files or phase ROADMAP.md. If any cross-phase dependency is NOT complete, STOP and report to the user:
+If any dependency from a previous phase is NOT complete, STOP:
 
 ```
 ⛔ Cannot start Phase X: Task Y.Z from Phase W is not complete.
-Please complete Phase W first, or run: /impl @tasks/{task-name}/phase-WW-name
+Run: /impl @tasks/{task-name}/phase-WW-name
 ```
 
-### 1d. Build dependency levels
-
-Group tasks into execution levels using topological sort:
+### 1d. Build dependency levels (topological sort)
 
 ```
-Level 0: Tasks with no pending dependencies (can start immediately)
-Level 1: Tasks that only depend on Level 0 tasks
-Level 2: Tasks that only depend on Level 0-1 tasks
-...
+Level 0: No pending dependencies
+Level 1: Depends only on Level 0
+Level 2: Depends only on Level 0-1
 ```
 
-Present the execution plan to the user:
-
-```
-📋 Phase X: [Phase Title]
-━━━━━━━━━━━━━━━━━━━━━━━━
-
-Pending tasks: N
-
-Execution Plan:
-  Level 0 (start immediately):
-    • Task X.1 — [title] → nodejs-performance agent
-    • Task X.6 — [title] → nodejs-performance agent
-  Level 1 (after Level 0):
-    • Task X.2 — [title] → nodejs-performance agent
-    • Task X.3 — [title] → nodejs-performance agent
-  Level 2 (after Level 1):
-    • Task X.4 — [title] → nodejs-performance agent
-  Level 3 (after Level 2):
-    • Task X.5 — [title] → nodejs-performance agent
-
-Cross-phase dependencies: All satisfied ✅
-
-Proceed? (y/n)
-```
-
-Wait for user confirmation before executing.
+Present execution plan and wait for user confirmation.
 
 ---
 
-## STEP 2: Execute Tasks
+## STEP 2: Execute Tasks (with Context Assembly)
 
-Process tasks level by level. Within each level, process tasks sequentially (Claude Code limitation — agents cannot run in parallel).
+Process level by level, sequentially within each level.
 
-### Agent Assignment Rules
+### 2a. Context Assembly per Task
 
-Map each task to the appropriate agent based on its content:
+**If the task file has `## Context Files` section → use that list (authoritative).**
 
-| Task Content                                                                                      | Agent                   | Rationale                                           |
-| ------------------------------------------------------------------------------------------------- | ----------------------- | --------------------------------------------------- |
-| Implementation tasks (creating source files, templates, configs, utilities, handlers, CDK stacks) | `nodejs-performance`    | Primary implementation agent with Node.js expertise |
-| Tasks that are ONLY about writing tests (no implementation)                                       | `test-engineer`         | Specialized test writing                            |
-| Tasks that are ONLY about reviewing/auditing existing code                                        | `code-quality-reviewer` | Specialized code review                             |
+Otherwise, assemble based on task type:
 
-In most phases, the vast majority of tasks are implementation tasks. The `nodejs-performance` agent handles all implementation because it understands Node.js patterns, Lambda handlers, async code, and performance implications as it writes code.
+Always include:
 
-### For each task, invoke the agent like this:
+- `CLAUDE.md`
+- `.claude/context/conventions.md`
+
+Add based on content:
+| Task involves | Also include |
+|--------------|-------------|
+| src/ code | `.claude/context/architecture.md` |
+| templates/ | `.claude/context/architecture.md` |
+| CDK stacks | `.claude/context/architecture.md` |
+| Tests | `.claude/context/testing.md` |
+| package.json | `.claude/context/dependencies.md` |
+
+Always add if they exist:
+
+- Latest `.claude/context/phase-NN-summary.md`
+- Output files from earlier tasks in THIS phase
+
+### 2b. Agent Assignment
+
+| Task Content                                               | Agent                   |
+| ---------------------------------------------------------- | ----------------------- |
+| Implementation (source, templates, configs, handlers, CDK) | `nodejs-performance`    |
+| Only writing tests                                         | `test-engineer`         |
+| Only reviewing code                                        | `code-quality-reviewer` |
+
+### 2c. Invoke agent
 
 ```
-Use the Agent tool to invoke [agent-name] with this context:
+Use the Agent tool to invoke [agent-name]:
 
 ## Task to Implement
+[Full task file content]
 
-[Paste the full task file content here]
+## Context
+Read these files before starting:
+- CLAUDE.md
+- .claude/context/conventions.md
+- [assembled context files from 2a]
+- [phase summaries if exist]
 
-## Project Conventions
-
-Read CLAUDE.md for project conventions before starting. Key points:
-- Follow Generated Code Conventions section (error response format, handler patterns, import conventions)
-- Follow Test Conventions section
-- Verify package versions with `npm view <pkg> version` before adding dependencies
-- Use ESM exclusively, Node 24 target
-
-## Existing Code Context
-
-[List any files from previous tasks in this phase that this task depends on,
-so the agent can read them for consistency]
+## Existing Code from This Phase
+[Files from completed tasks in current phase — for consistency]
 
 ## Definition of Done
-
-When complete, verify ALL acceptance criteria from the task file are met.
-List each criterion and its status.
+Verify ALL acceptance criteria. List each with pass/fail status.
 ```
 
-### After each task completes:
+### 2d. After each task
 
-1. Verify the agent reported on all acceptance criteria
-2. If any criterion is NOT met, re-invoke the agent with specific instructions to fix
-3. Log completion:
-   ```
-   ✅ Task X.Y — [title] — Complete
-   ```
-
-### After each level completes:
-
-Report progress:
-
-```
-━━━ Level N Complete ━━━
-✅ Task X.1 — [title]
-✅ Task X.6 — [title]
-Moving to Level N+1...
-```
+Verify acceptance criteria met. Re-invoke if not. Log: `✅ Task X.Y — [title]`
 
 ---
 
 ## STEP 3: Code Review Loop
 
-After ALL implementation tasks in the phase are complete, run the review cycle.
+After ALL implementation tasks complete.
 
 ### 3a. Invoke code-quality-reviewer
 
-```
-Use the Agent tool to invoke code-quality-reviewer with this context:
+Pass: all output files, conventions.md, testing.md as context. Focus: security, quality, convention consistency.
 
-## Review Scope
+### 3b. Process findings
 
-Phase X implementation is complete. Review ALL files created or modified in this phase:
+🔴 Critical / 🟠 High → invoke nodejs-performance to fix (pass only the findings + conventions.md)
+🔵 Low / ℹ️ Nitpick → note but don't block
 
-[List all output files from all tasks in this phase]
+### 3c. Re-review modified files only
 
-## Review Focus
-
-1. Security vulnerabilities (OWASP Top 10)
-2. Code quality (naming, DRY/KISS, error handling, function design)
-3. Consistency with CLAUDE.md Generated Code Conventions
-4. Cross-file consistency (all handlers follow same patterns, all tests follow same structure)
-
-## Previous Phase Patterns
-
-[If this is Phase 2+, mention patterns established in earlier phases
-that this phase's code should follow]
-
-Report findings in the standard format with severity levels.
-Flag any performance concerns for potential nodejs-performance deep-dive.
-```
-
-### 3b. Process review findings
-
-Parse the reviewer's output. Categorize findings:
-
-- 🔴 **Critical / 🟠 High**: MUST fix before proceeding
-- 🟡 **Medium**: Should fix
-- 🔵 **Low / ℹ️ Nitpick**: Note but don't block
-
-If there are 🔴 Critical or 🟠 High findings:
-
-```
-Use the Agent tool to invoke nodejs-performance with this context:
-
-## Fix Required
-
-The code-quality-reviewer found the following issues that must be fixed:
-
-[Paste only the Critical and High findings with file locations and suggested fixes]
-
-## Files to Modify
-
-[List specific files that need changes]
-
-## Constraints
-
-- Follow CLAUDE.md conventions
-- Do NOT change the overall architecture or approach — only fix the flagged issues
-- After fixing, verify the acceptance criteria from the original tasks still pass
-```
-
-### 3c. Re-review after fixes
-
-After fixes are applied, invoke `code-quality-reviewer` again, but ONLY for the files that were modified in the fix:
-
-```
-Re-review ONLY these modified files: [list]
-Previous findings that were addressed: [list]
-Verify fixes are correct and no new issues introduced.
-```
-
-### 3d. Loop control
-
-- Maximum **3 review cycles**. If issues persist after 3 cycles, report to user:
-  ```
-  ⚠️ Review loop reached maximum iterations (3). Remaining issues:
-  [list remaining issues]
-  Please review manually and decide how to proceed.
-  ```
-- If a cycle produces ONLY 🔵 Low / ℹ️ Nitpick findings, consider review PASSED.
-- Track each cycle:
-  ```
-  Review Cycle 1: 2 Critical, 1 High, 3 Medium → Fixing...
-  Review Cycle 2: 0 Critical, 0 High, 1 Medium → Fixing...
-  Review Cycle 3: 0 Critical, 0 High, 0 Medium, 2 Low → ✅ Review Passed
-  ```
+Maximum **3 review cycles**. If issues persist → report to user.
 
 ---
 
 ## STEP 4: Test Writing
 
-After the review loop passes, invoke the test engineer.
+After review passes.
 
-### 4a. Analyze what needs testing
+Invoke test-engineer with: new files list, existing tests that may need updates, testing.md + conventions.md as context.
 
-Before invoking the agent, determine:
-
-- Which files were created in this phase that need tests
-- Which existing test files might need updates (if this phase modified existing code)
-- What test patterns are already established (read existing test files if any)
-
-### 4b. Invoke test-engineer
-
-```
-Use the Agent tool to invoke test-engineer with this context:
-
-## Test Scope
-
-Phase X implementation is complete and reviewed. Write tests for:
-
-### New files that need tests:
-[List all implementation files from this phase]
-
-### Existing tests that may need updates:
-[List any test files that might be affected by this phase's changes]
-
-### Test Patterns to Follow:
-- Read CLAUDE.md Test Conventions section
-- Read existing test files in the project for established patterns: [list paths if any exist]
-- Use the mock patterns defined in CLAUDE.md (createMockEvent, supertest via app.fetch, etc.)
-
-### Requirements:
-1. Write tests for ALL new implementation files
-2. Check if any existing tests need updates due to this phase's changes
-3. Run `pnpm test` to verify ALL tests pass (new and existing)
-4. If any test fails, fix it before completing
-5. Report coverage summary when done
-```
-
-### 4c. Verify tests pass
-
-After the test-engineer completes, verify:
-
-- Agent confirmed `pnpm test` passes
-- No existing tests were broken
-- Coverage summary was reported
-
-If tests fail:
-
-```
-Re-invoke test-engineer:
-"The following tests are failing: [paste failures]. Fix them and verify all tests pass."
-```
-
-Maximum **2 retry cycles** for test fixes. If still failing after 2 retries, report to user.
+Requirements: tests for ALL new files, verify existing tests not broken, `pnpm test` must pass. Maximum **2 retry cycles**.
 
 ---
 
-## STEP 5: Update Progress
+## STEP 5: Generate Phase Summary
 
-After all steps complete successfully, update the project documentation.
-
-### 5a. Update phase ROADMAP.md
-
-Read the current phase ROADMAP.md. Update:
-
-- Each completed task's status: `⬜ Not Started` → `✅ Complete`
-- Progress counter: `Progress: X/Y tasks complete`
-- If all tasks complete, mark phase completion criteria as checked
-
-Example update:
+Create `.claude/context/phase-NN-summary.md` with:
 
 ```markdown
-| 1.1 | Initialize package.json | Low | None | ✅ Complete |
+# Phase N Summary: [Title]
+
+## Completed On
+
+[date]
+
+## What Was Built
+
+- `path/file.ts` — one-line description
+
+## Key APIs (for downstream tasks)
+
+- `functionName(params): ReturnType` — what it does
+
+## Patterns Established
+
+[NEW patterns not in conventions.md]
+
+## Decisions Made
+
+[Decisions affecting future work]
+
+## Dependencies Added
+
+- `pkg@version` — why
+
+## Known Limitations
 ```
 
-### 5b. Update top-level ROADMAP.md
-
-Read `tasks/{task-name}/ROADMAP.md`. Update:
-
-- Phase status: `⬜ Not Started` → `✅ Complete` (if all tasks done) or `🔄 In Progress`
-- Completed count for the phase
-
-### 5c. Update individual task files
-
-For each completed task, update the Status section:
-
-```markdown
-## Status
-
-- [x] Complete
-```
+Rules: under 80 lines, downstream-focused, no duplication with conventions.md.
 
 ---
 
-## STEP 6: Final Report
+## STEP 6: Update Progress
 
-Present a completion summary to the user:
+Update phase ROADMAP.md (task statuses + progress counter), top-level ROADMAP.md (phase status), individual task files (status checkbox).
+
+---
+
+## STEP 7: Final Report
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Phase X: [Phase Title] — COMPLETE
+📋 Phase X: [Title] — COMPLETE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Tasks Completed: X/X
-Review Cycles: N (final: all clear)
-Tests: X tests written, all passing
-
-Files Created:
-  • src/types.ts
-  • src/constants.ts
-  • ...
-
-Files Modified:
-  • (none, or list)
-
-Test Files:
-  • test/types.test.ts (N tests)
-  • ...
-
-ROADMAP Updates:
-  • Phase ROADMAP.md ✅
-  • Top-level ROADMAP.md ✅
-  • Task files ✅
-
-⏭️  Next Phase: Phase Y — [Title]
-   Ready to start: [Yes/No — based on cross-phase dependencies]
-   Run: /impl @tasks/{task-name}/phase-YY-name
+Tasks: X/X | Reviews: N cycles | Tests: all passing
+Summary: .claude/context/phase-XX-summary.md ✅
+⏭️  Next: /impl @tasks/{task-name}/phase-YY-name
 ```
 
 ---
 
-## Error Handling
+## Error & Resume
 
-### Agent invocation fails
-
-If an agent errors out or produces unusable output:
-
-1. Retry once with the same context
-2. If it fails again, report to user with the error details
-3. Ask user whether to skip this task, retry with different instructions, or abort
-
-### Circular dependency detected
-
-Report to user immediately. Do not attempt to resolve.
-
-### Partial phase completion
-
-If the user interrupts (`Ctrl+C`) or an unrecoverable error occurs mid-phase:
-
-1. Update ROADMAP.md with whatever tasks ARE complete
-2. Mark incomplete tasks as `🔄 In Progress` or `⬜ Not Started`
-3. Report what was completed and what remains
-4. The next `/impl` invocation will pick up where it left off (it skips ✅ Complete tasks)
-
----
-
-## Resume Support
-
-When invoked on a phase that's partially complete:
-
-1. Read ROADMAP.md to identify which tasks are ✅ Complete
-2. Skip completed tasks entirely
-3. Rebuild dependency levels from only the pending tasks
-4. Continue from Step 2 with the remaining work
-
-Report what was already done:
-
-```
-📋 Phase X: [Title] — RESUMING
-Already complete: Task X.1, Task X.3
-Remaining: Task X.2, Task X.4, X.5, X.6
-```
+Agent fails → retry once → report. Partial completion → update ROADMAPs → next /impl resumes from pending tasks.

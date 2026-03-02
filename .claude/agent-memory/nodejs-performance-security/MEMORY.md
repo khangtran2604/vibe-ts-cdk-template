@@ -121,9 +121,11 @@ const isMain = (() => {
   propagates to `index.ts` outer catch.
 - Template root: `import.meta.dirname ?? dirname(fileURLToPath(import.meta.url))`
   then `join(dir, "..", "templates")`. `import.meta.dirname` is Node 21+, safe on Node 24.
-- `SUBDIR_TEMPLATE_DIRS = new Set(["services", "infra", "dev-gateway", "packages"])`.
-  These land in a same-named subdir of the project. Others (base, frontend, auth,
-  e2e, database, cicd, monitoring, extras) are merged into the project root.
+- `SUBDIR_TEMPLATE_DIRS = new Set(["services","infra","dev-gateway","packages","frontend","auth","e2e"])`.
+  These land in a same-named subdir of the project. Others (base, database, cicd,
+  monitoring, extras) are merged into the project root.
+  frontend/auth/e2e were added in Phase 5 — they are workspace members that need
+  their own subdirectory, not merged into root.
 - `SUBDIR_TEMPLATE_DIRS` is a module-level constant (not inside `scaffold()`).
 - `pnpm-workspace.yaml` is generated via `buildWorkspaceYaml(getWorkspaceEntries(features))`
   — never from a template file.
@@ -152,54 +154,13 @@ const isMain = (() => {
 | `test/template-helpers.test.ts` | template-helpers unit tests (55 tests) |
 | `tsup.config.ts` | Build config (entry: `src/index.ts`, target: node24) |
 
-### packages/ template conventions
-- All package `tsconfig.json` files contain `"extends": "@{{projectName}}/tsconfig/node.json"` →
-  must use `.hbs` extension so the placeholder gets replaced. Plain `tsconfig.json` with
-  `{{...}}` won't be substituted.
-- `tsconfig` package: no `type:module`, no scripts, no devDeps — just `exports` for each .json.
-- `eslint-config` package: ships plain JS (`src/index.js`) as the entrypoint — no build step.
-  Uses `dependencies` (not devDependencies) for `@eslint/js` and `typescript-eslint` so consumers
-  don't have to install them separately.
-- `lambda-utils`: `hono` is a **devDependency only** (only used for the adapter type/import in
-  dev-server context); `@types/aws-lambda` is also devDep (types only, not runtime).
-- Packages that depend on each other would use `workspace:*` protocol in package.json. None of
-  the 5 packages depend on each other at runtime (tsconfig extends are TypeScript-level, not npm deps).
-- Every package that extends `@{{projectName}}/tsconfig/node.json` MUST declare
-  `"@{{projectName}}/tsconfig": "workspace:*"` as a devDependency — TypeScript resolves
-  `extends` through node_modules. Missing this causes `TS6053: File not found`.
-- Packages using Node.js globals (process, console, Buffer, NodeJS.ErrnoException) MUST include
-  `"@types/node": "22.x"` as a devDependency. This affects: utils, lambda-utils, health, users,
-  dev-gateway. The infra package already includes it.
-- `utils` and `lambda-utils` have a `test` script but no test files — their vitest configs use
-  `passWithNoTests: true` so the test pipeline doesn't fail on empty packages.
-- Service vitest configs must include `exclude: ["dist/**", "**/node_modules/**"]` to prevent
-  compiled `.js` test files from being double-run alongside the `.ts` source tests.
-- `lambdaToHono()` return type must be explicitly annotated as
-  `(c: Context) => Promise<Response>` to avoid TS2742 "cannot be named without a reference
-  to undici-types" when `@types/node` is present (its fetch types reference undici-types).
-- Root `package.json` must include `"packageManager": "pnpm@<version>"` — Turbo 2.8.12+
-  requires this field to resolve workspaces (fails with "Missing packageManager field").
-- `aws-cdk` CLI package version (2.1108.0) is separate from `aws-cdk-lib` (2.241.0).
-  The CLI versioning runs much higher — always verify with `npm view aws-cdk version`.
-
-### services/ template conventions
-- Each service has: `package.json.hbs`, `tsconfig.json.hbs`, `vitest.config.ts`, `src/handlers/`, `src/__tests__/`, `test/integration/`.
-- Handler signature: `(event: APIGatewayProxyEvent) => Promise<APIGatewayProxyResult>`. Zero framework deps.
-- In-memory store: module-level `Map` exported from `src/store.ts` — shared across all handlers in the same process.
-- Dev server pattern: `src/app.ts.hbs` exports the Hono app (shared between dev-server and integration tests); `src/dev-server.ts.hbs` imports `app` and calls `serve()`.
-- Integration tests use supertest + `@hono/node-server`'s `serve({ fetch: app.fetch, port: 0 })` for ephemeral port binding. Server is created in `beforeEach`, closed in `afterEach`.
-- `hono`, `@hono/node-server`, `supertest`, `@types/supertest`, `@types/aws-lambda` are ALL devDependencies.
-- `// @feature:database` annotations mark lines to swap in-memory store for a real repository in Phase 6.
-- `lambdaToHono` adapter MUST forward Hono path params to `event.pathParameters` — fixed in `templates/packages/lambda-utils/src/lambda-adapter.ts` via `c.req.param()`.
-- Status codes: 201 create, 200 get/list/update, 204 delete, 404 not found, 400 bad request.
-- UUID generation: `crypto.randomUUID()` (Node built-in, no uuid package needed).
-- Service ports: health=3001, users=3002.
-
-### template-helpers conventions
-- `getTemplateDirs(features)` — always returns `["base","infra","services","dev-gateway","packages"]` then
-  appends conditionals in order: `frontend`, `auth`, `e2e`, `database`, `cicd`, `monitoring`, `extras`.
-  The `hooks` flag maps to the `"extras"` directory (not `"hooks"`).
-- `getVariableMap(config)` — returns `{ projectName, awsRegion }` at minimum; grows as templates are authored.
-- `getWorkspaceEntries(features)` — always returns `["infra","services/*","dev-gateway","packages/*"]` then
-  appends `frontend`, `auth`, `e2e` if enabled. `database`, `rds`, `cicd`, `monitoring`, `hooks` do NOT
-  produce separate workspace entries.
+### Template conventions (packages/, services/, auth/, CDK stacks, template-helpers)
+See `templates.md` for full details. Key rules:
+- `tsconfig.json` with `{{projectName}}` placeholder MUST use `.hbs` extension.
+- Every package extending `@{{projectName}}/tsconfig/node.json` needs `"@{{projectName}}/tsconfig": "workspace:*"` devDep.
+- Node.js globals require `"@types/node": "22.x"` devDep — affects: utils, lambda-utils, health, users, dev-gateway, auth.
+- Service vitest configs: `exclude: ["dist/**", "**/node_modules/**"]`.
+- CDK stacks: extend `ServiceStack`, use `this.resourceName()`, `this.removalPolicy`, `this.logRetention()`.
+- Auth lambda authorizer: `aws-jwt-verify` (production dep), types from `aws-lambda`, returns Deny on all failures.
+- Auth stack CDK entry path: `../../../../auth/src/authorizer.ts` relative to `__dirname` inside infra/src/stacks/modules/.
+- `getWorkspaceEntries`: `frontend`, `auth`, `e2e` get workspace entries when enabled. Other features do not.

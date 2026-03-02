@@ -1,0 +1,166 @@
+import * as cdk from "aws-cdk-lib";
+import * as cognito from "aws-cdk-lib/aws-cognito";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as logs from "aws-cdk-lib/aws-logs";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import type { Construct } from "constructs";
+import { ServiceStack, type ServiceStackProps } from "../base-stack";
+import * as path from "path";
+
+/**
+ * AuthStack — provisions Cognito authentication and a Lambda authorizer.
+ *
+ * Resources created:
+ * - Cognito UserPool: handles user sign-up, sign-in, and token issuance
+ * - Cognito UserPoolClient: SPA-friendly client (no secret)
+ * - Lambda function: validates Cognito JWTs for API Gateway TOKEN authorizers
+ * - CloudWatch Log Group: for authorizer Lambda logs
+ *
+ * Outputs (available to other stacks and CI/CD pipelines):
+ * - UserPoolId — reference in service stacks that accept the authorizer ARN
+ * - UserPoolClientId — used by the frontend (Amplify / Cognito Hosted UI)
+ * - AuthorizerFunctionArn — attach to API Gateway authorizers in other stacks
+ */
+export class AuthStack extends ServiceStack {
+  /** Cognito UserPool — share with other stacks if they need the pool ARN */
+  public readonly userPool: cognito.UserPool;
+  /** App client ID — consumed by the frontend (no secret, safe to expose) */
+  public readonly userPoolClientId: string;
+  /** ARN of the Lambda authorizer function */
+  public readonly authorizerFunctionArn: string;
+
+  constructor(scope: Construct, id: string, props: ServiceStackProps) {
+    super(scope, id, props);
+
+    // -------------------------------------------------------------------------
+    // Cognito UserPool
+    // -------------------------------------------------------------------------
+    this.userPool = new cognito.UserPool(this, "UserPool", {
+      userPoolName: this.resourceName("{{projectName}}-user-pool"),
+
+      // Allow users to register themselves (disable for invite-only flows)
+      selfSignUpEnabled: true,
+
+      // Sign-in with email address
+      signInAliases: { email: true },
+      autoVerify: { email: true },
+
+      // Password policy — enforced at sign-up and password-change time
+      passwordPolicy: {
+        minLength: 8,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: false,
+      },
+
+      // Standard email attribute — auto-populated at sign-up
+      standardAttributes: {
+        email: { required: true, mutable: true },
+      },
+
+      // Account recovery via email only
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+
+      // Delete the pool in dev/staging; retain in prod to protect user data
+      removalPolicy: this.removalPolicy,
+    });
+
+    // -------------------------------------------------------------------------
+    // UserPool App Client — no secret (suitable for SPAs and mobile apps)
+    // -------------------------------------------------------------------------
+    const userPoolClient = new cognito.UserPoolClient(
+      this,
+      "UserPoolClient",
+      {
+        userPool: this.userPool,
+        userPoolClientName: this.resourceName("{{projectName}}-app-client"),
+        // No secret — clients run in the browser and cannot keep secrets
+        generateSecret: false,
+        authFlows: {
+          // USER_SRP_AUTH is the secure default — never enable ALLOW_USER_PASSWORD_AUTH
+          // in production as it transmits the password over the wire.
+          userSrp: true,
+          // Allow refresh token flow so sessions can be renewed silently
+          userPassword: false,
+          custom: false,
+        },
+        // Token validity — tune per security requirements
+        accessTokenValidity: cdk.Duration.hours(1),
+        idTokenValidity: cdk.Duration.hours(1),
+        refreshTokenValidity: cdk.Duration.days(30),
+        preventUserExistenceErrors: true,
+      }
+    );
+
+    this.userPoolClientId = userPoolClient.userPoolClientId;
+
+    // -------------------------------------------------------------------------
+    // CloudWatch Log Group for the authorizer Lambda
+    // -------------------------------------------------------------------------
+    const logGroup = new logs.LogGroup(this, "AuthorizerLogGroup", {
+      logGroupName: `/aws/lambda/{{projectName}}-authorizer-${this.stage}`,
+      retention: this.logRetention(),
+      removalPolicy: this.removalPolicy,
+    });
+
+    // -------------------------------------------------------------------------
+    // Lambda authorizer function
+    //
+    // Validates access tokens issued by the UserPool above.
+    // The verifier is initialised at module scope (cold start) and reused
+    // across warm invocations — keep the function warm to avoid JWKS fetches.
+    // -------------------------------------------------------------------------
+    const authorizerFn = new NodejsFunction(this, "AuthorizerFunction", {
+      functionName: this.resourceName("{{projectName}}-authorizer"),
+      runtime: lambda.Runtime.NODEJS_22_X,
+      entry: path.resolve(
+        __dirname,
+        "../../../../auth/src/authorizer.ts"
+      ),
+      handler: "handler",
+      memorySize: this.config.lambdaMemoryMb,
+      timeout: cdk.Duration.seconds(this.config.lambdaTimeoutSecs),
+      tracing: this.config.tracingEnabled
+        ? lambda.Tracing.ACTIVE
+        : lambda.Tracing.DISABLED,
+      logGroup,
+      environment: {
+        NODE_ENV: this.stage === "prod" ? "production" : "development",
+        STAGE: this.stage,
+        USER_POOL_ID: this.userPool.userPoolId,
+        CLIENT_ID: userPoolClient.userPoolClientId,
+      },
+      bundling: {
+        // Exclude aws-sdk — provided by the Lambda runtime
+        externalModules: ["@aws-sdk/*"],
+        minify: this.stage === "prod",
+        sourceMap: this.stage !== "prod",
+      },
+    });
+
+    this.authorizerFunctionArn = authorizerFn.functionArn;
+
+    // -------------------------------------------------------------------------
+    // Stack outputs — consumed by other stacks and the frontend build pipeline
+    // -------------------------------------------------------------------------
+
+    new cdk.CfnOutput(this, "UserPoolId", {
+      value: this.userPool.userPoolId,
+      description: "Cognito UserPool ID",
+      exportName: `{{projectName}}-UserPoolId-${this.stage}`,
+    });
+
+    new cdk.CfnOutput(this, "UserPoolClientId", {
+      value: userPoolClient.userPoolClientId,
+      description: "Cognito UserPool App Client ID",
+      exportName: `{{projectName}}-UserPoolClientId-${this.stage}`,
+    });
+
+    new cdk.CfnOutput(this, "AuthorizerFunctionArn", {
+      value: authorizerFn.functionArn,
+      description: "Lambda authorizer function ARN — attach to API Gateway authorizers",
+      exportName: `{{projectName}}-AuthorizerFunctionArn-${this.stage}`,
+    });
+  }
+}
