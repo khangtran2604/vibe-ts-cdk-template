@@ -35,4 +35,4 @@ Update `src/index.ts` to call the `scaffold()` function after prompts are comple
 Low -- Integration wiring with error handling
 
 ## Status
-- [ ] Not Started
+- [x] Complete

@@ -42,4 +42,4 @@ Create `src/prompts.ts` with the full interactive prompt flow using `@clack/prom
 Medium -- Multiple prompts with conditional logic and validation
 
 ## Status
-- [ ] Not Started
+- [x] Complete

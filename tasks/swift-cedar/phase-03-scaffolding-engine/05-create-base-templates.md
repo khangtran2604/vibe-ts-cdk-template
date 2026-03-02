@@ -43,4 +43,4 @@ Create the `templates/base/` directory with root configuration files that every 
 Medium -- Requires understanding monorepo tooling configuration
 
 ## Status
-- [ ] Not Started
+- [x] Complete

@@ -36,4 +36,4 @@ Create `src/presets.ts` that maps each preset tier (minimal, standard, full) to 
 Low -- Simple mapping logic
 
 ## Status
-- [ ] Not Started
+- [x] Complete

@@ -40,4 +40,4 @@ Create `src/template-helpers.ts` which maps `FeatureFlags` to the list of templa
 Medium -- Requires understanding the full template structure and feature-to-directory mapping
 
 ## Status
-- [ ] Not Started
+- [x] Complete

@@ -37,4 +37,4 @@ Create the `tsconfig.json` for the CLI tool with settings appropriate for a Node
 Low -- Standard tsconfig for Node.js ESM project
 
 ## Status
-- [ ] Not Started
+- [x] Complete

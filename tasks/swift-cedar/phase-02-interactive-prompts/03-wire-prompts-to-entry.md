@@ -36,4 +36,4 @@ Update `src/index.ts` to connect the commander argument parsing with the clack p
 Medium -- Integration of multiple modules with conditional flow
 
 ## Status
-- [ ] Not Started
+- [x] Complete

@@ -37,4 +37,4 @@ Create `tsup.config.ts` to build the CLI as an ESM bundle with a shebang banner.
 Low -- Straightforward tsup configuration
 
 ## Status
-- [ ] Not Started
+- [x] Complete
