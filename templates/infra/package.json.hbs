@@ -1,0 +1,24 @@
+{
+  "name": "{{projectName}}-infra",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit && tsc -p tsconfig.build.json",
+    "deploy:dev": "cdk deploy --all --context stage=dev",
+    "deploy:staging": "cdk deploy --all --context stage=staging",
+    "deploy:prod": "cdk deploy --all --context stage=prod",
+    "diff": "cdk diff --context stage=dev",
+    "synth": "cdk synth --context stage=dev",
+    "destroy:dev": "cdk destroy --all --context stage=dev"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.241.0",
+    "constructs": "10.5.1"
+  },
+  "devDependencies": {
+    "aws-cdk": "2.1108.0",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.3",
+    "@types/node": "22.x"
+  }
+}

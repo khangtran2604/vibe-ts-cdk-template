@@ -1,0 +1,17 @@
+/**
+ * Local development server for the users microservice.
+ *
+ * This file is NOT deployed to Lambda. It starts the Hono HTTP server so you
+ * can call the users endpoints locally during development.
+ *
+ * Run with:  pnpm dev   (uses tsx watch for hot reload)
+ */
+
+import { serve } from "@hono/node-server";
+import { app } from "./app.js";
+
+const PORT = 3002;
+
+serve({ fetch: app.fetch, port: PORT }, () => {
+  console.log(`[users] dev server listening on http://localhost:${PORT}`);
+});

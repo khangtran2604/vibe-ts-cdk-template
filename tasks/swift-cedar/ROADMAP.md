@@ -12,7 +12,7 @@
 | 1 | Bootstrap CLI Project | 6 | 6 | ✅ Complete |
 | 2 | Interactive Prompts | 3 | 3 | ✅ Complete |
 | 3 | Scaffolding Engine + Base Templates | 6 | 6 | ✅ Complete |
-| 4 | Minimal Preset Templates | 6 | 0 | ⬜ Not Started |
+| 4 | Minimal Preset Templates | 6 | 6 | ✅ Complete |
 | 5 | Standard Preset Templates | 5 | 0 | ⬜ Not Started |
 | 6 | Full Preset Templates | 5 | 0 | ⬜ Not Started |
 | 7 | Testing & Polish | 6 | 0 | ⬜ Not Started |

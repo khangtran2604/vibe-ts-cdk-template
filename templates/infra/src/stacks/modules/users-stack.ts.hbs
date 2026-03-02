@@ -1,0 +1,178 @@
+import * as cdk from "aws-cdk-lib";
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as logs from "aws-cdk-lib/aws-logs";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import type { Construct } from "constructs";
+import { ServiceStack, type ServiceStackProps } from "../base-stack";
+import * as path from "path";
+
+/**
+ * UsersStack — deploys the users microservice.
+ *
+ * Resources created:
+ * - Lambda functions: list, get, create, update, delete handlers
+ * - API Gateway (RestApi): dedicated gateway for this service — NOT shared
+ * - CloudWatch Log Group: for Lambda function logs
+ *
+ * Route mapping:
+ *   GET    /users          → listUsers
+ *   POST   /users          → createUser
+ *   GET    /users/{id}     → getUser
+ *   PUT    /users/{id}     → updateUser
+ *   DELETE /users/{id}     → deleteUser
+ *
+ * Each service owns its own API Gateway per project convention.
+ */
+export class UsersStack extends ServiceStack {
+  /** The URL of the deployed API Gateway endpoint */
+  public readonly apiUrl: string;
+
+  constructor(scope: Construct, id: string, props: ServiceStackProps) {
+    super(scope, id, props);
+
+    // -------------------------------------------------------------------------
+    // CloudWatch Log Group for Lambda logs
+    // -------------------------------------------------------------------------
+    const logGroup = new logs.LogGroup(this, "UsersFunctionLogGroup", {
+      logGroupName: `/aws/lambda/{{projectName}}-users-${this.stage}`,
+      retention: this.logRetention(),
+      removalPolicy: this.removalPolicy,
+    });
+
+    // -------------------------------------------------------------------------
+    // Shared Lambda props — applied to every function in this stack
+    // -------------------------------------------------------------------------
+    const sharedFnProps = {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      memorySize: this.config.lambdaMemoryMb,
+      timeout: cdk.Duration.seconds(this.config.lambdaTimeoutSecs),
+      tracing: this.config.tracingEnabled
+        ? lambda.Tracing.ACTIVE
+        : lambda.Tracing.DISABLED,
+      logGroup,
+      environment: {
+        NODE_ENV: this.stage === "prod" ? "production" : "development",
+        STAGE: this.stage,
+      },
+      bundling: {
+        // Exclude aws-sdk — provided by the Lambda runtime
+        externalModules: ["@aws-sdk/*"],
+        minify: this.stage === "prod",
+        sourceMap: this.stage !== "prod",
+      },
+    } satisfies Partial<ConstructorParameters<typeof NodejsFunction>[2]>;
+
+    const handlerRoot = path.resolve(
+      __dirname,
+      "../../../../services/users/src/handlers"
+    );
+
+    // -------------------------------------------------------------------------
+    // Lambda functions — one per CRUD operation
+    // -------------------------------------------------------------------------
+    const listUsersFn = new NodejsFunction(this, "ListUsersFunction", {
+      functionName: this.resourceName("{{projectName}}-users-list"),
+      entry: path.join(handlerRoot, "list-users.ts"),
+      handler: "handler",
+      ...sharedFnProps,
+    });
+
+    const getUserFn = new NodejsFunction(this, "GetUserFunction", {
+      functionName: this.resourceName("{{projectName}}-users-get"),
+      entry: path.join(handlerRoot, "get-user.ts"),
+      handler: "handler",
+      ...sharedFnProps,
+    });
+
+    const createUserFn = new NodejsFunction(this, "CreateUserFunction", {
+      functionName: this.resourceName("{{projectName}}-users-create"),
+      entry: path.join(handlerRoot, "create-user.ts"),
+      handler: "handler",
+      ...sharedFnProps,
+    });
+
+    const updateUserFn = new NodejsFunction(this, "UpdateUserFunction", {
+      functionName: this.resourceName("{{projectName}}-users-update"),
+      entry: path.join(handlerRoot, "update-user.ts"),
+      handler: "handler",
+      ...sharedFnProps,
+    });
+
+    const deleteUserFn = new NodejsFunction(this, "DeleteUserFunction", {
+      functionName: this.resourceName("{{projectName}}-users-delete"),
+      entry: path.join(handlerRoot, "delete-user.ts"),
+      handler: "handler",
+      ...sharedFnProps,
+    });
+
+    // -------------------------------------------------------------------------
+    // API Gateway — dedicated RestApi for the users service
+    // -------------------------------------------------------------------------
+    const api = new apigateway.RestApi(this, "UsersApi", {
+      restApiName: this.resourceName("{{projectName}}-users-api"),
+      description: "Users service for {{projectName}}",
+      deployOptions: {
+        stageName: this.stage,
+        loggingLevel: apigateway.MethodLoggingLevel.ERROR,
+        dataTraceEnabled: false,
+        metricsEnabled: true,
+      },
+      // TODO: Restrict allowOrigins to your domain(s) before deploying to production.
+      // e.g. allowOrigins: this.stage === "prod" ? ["https://yourdomain.com"] : apigateway.Cors.ALL_ORIGINS
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: [
+          "Content-Type",
+          "Authorization",
+          "X-Requested-With",
+        ],
+      },
+    });
+
+    // /users
+    const usersResource = api.root.addResource("users");
+    usersResource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(listUsersFn, { proxy: true })
+    );
+    usersResource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(createUserFn, { proxy: true })
+    );
+
+    // /users/{id}
+    const userByIdResource = usersResource.addResource("{id}");
+    userByIdResource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(getUserFn, { proxy: true })
+    );
+    userByIdResource.addMethod(
+      "PUT",
+      new apigateway.LambdaIntegration(updateUserFn, { proxy: true })
+    );
+    userByIdResource.addMethod(
+      "DELETE",
+      new apigateway.LambdaIntegration(deleteUserFn, { proxy: true })
+    );
+
+    // -------------------------------------------------------------------------
+    // Stack outputs
+    // -------------------------------------------------------------------------
+    this.apiUrl = api.url;
+
+    new cdk.CfnOutput(this, "UsersApiUrl", {
+      value: api.url,
+      description: "Users service API Gateway URL",
+      exportName: `{{projectName}}-UsersApiUrl-${this.stage}`,
+    });
+
+    new cdk.CfnOutput(this, "ListUsersFunctionArn", {
+      value: listUsersFn.functionArn,
+      description: "List users Lambda function ARN",
+      exportName: `{{projectName}}-ListUsersFunctionArn-${this.stage}`,
+    });
+  }
+
+}

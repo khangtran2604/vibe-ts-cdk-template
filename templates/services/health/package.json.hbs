@@ -1,0 +1,26 @@
+{
+  "name": "@{{projectName}}/health",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/handlers/health.js",
+  "scripts": {
+    "dev": "tsx watch src/dev-server.ts",
+    "build": "tsc --build",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@{{projectName}}/lambda-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@{{projectName}}/tsconfig": "workspace:*",
+    "@hono/node-server": "1.19.9",
+    "@types/aws-lambda": "8.10.161",
+    "@types/node": "22.x",
+    "hono": "4.12.3",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vitest": "4.0.18"
+  }
+}

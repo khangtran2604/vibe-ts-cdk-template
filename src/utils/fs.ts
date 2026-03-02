@@ -39,15 +39,17 @@ const BINARY_EXTENSIONS = new Set([
 ]);
 
 /**
- * Matches `// @feature:<name> <rest of line>` conditional annotations.
+ * Matches `// @feature:<name> <rest of line>` conditional annotations,
+ * including indented variants such as `  // @feature:X code`.
  *
- * Group 1: feature name  (word characters only — matches FeatureFlags keys)
- * Group 2: the actual code / text to keep when the feature is enabled
+ * Group 1: leading whitespace (indentation to restore when feature is enabled)
+ * Group 2: feature name  (word characters only — matches FeatureFlags keys)
+ * Group 3: the actual code / text to keep when the feature is enabled
  *
  * Hoisted to module scope so it is compiled once rather than on every call
  * to {@link processConditionals}.
  */
-const CONDITIONAL_RE = /^\/\/ @feature:(\w+) (.*)$/;
+const CONDITIONAL_RE = /^(\s*)\/\/ @feature:(\w+) (.*)$/;
 
 // ---------------------------------------------------------------------------
 // Public helpers — pure functions (no I/O), easy to unit-test
@@ -106,9 +108,13 @@ export function replaceVariables(
 
 /**
  * Processes `// @feature:X <rest>` conditional lines in template content.
+ * Both top-level and indented annotations are supported:
  *
- * - If feature `X` is **enabled** in `features`: the annotation prefix
- *   (`// @feature:X `) is stripped and the rest of the line is kept.
+ *   `// @feature:X code`        → at column 0
+ *   `  // @feature:X code`      → indented (leading whitespace preserved in output)
+ *
+ * - If feature `X` is **enabled** in `features`: the `// @feature:X ` annotation
+ *   is stripped and the rest of the line is kept (indentation is preserved).
  * - If feature `X` is **disabled**: the entire line is removed.
  * - Lines that do not match the pattern are passed through unchanged.
  *
@@ -121,9 +127,12 @@ export function replaceVariables(
  * @returns The processed content string.
  *
  * @example
- * // features = { frontend: true, auth: false, ... }
+ * // features = { frontend: true, auth: false, database: false }
  * processConditionals('// @feature:frontend import React from "react"', features)
  * // → 'import React from "react"'
+ *
+ * processConditionals('  // @feature:database const x = await repo.find(id);', features)
+ * // → ''  (line removed entirely — database is disabled)
  *
  * processConditionals('// @feature:auth import { Auth } from "./auth"', features)
  * // → ''  (line removed entirely)
@@ -143,12 +152,14 @@ export function processConditionals(
       continue;
     }
 
-    const featureName = match[1] as keyof FeatureFlags;
+    const indent = match[1];
+    const featureName = match[2] as keyof FeatureFlags;
+    const code = match[3];
     const isEnabled = features[featureName] === true;
 
     if (isEnabled) {
-      // Feature is on: strip the annotation prefix, keep the rest.
-      output.push(match[2]);
+      // Feature is on: strip the annotation prefix, restore indentation.
+      output.push(`${indent}${code}`);
     }
     // Feature is off: discard the entire line (don't push anything).
   }

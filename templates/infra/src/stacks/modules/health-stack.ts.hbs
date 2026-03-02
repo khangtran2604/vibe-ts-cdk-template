@@ -1,0 +1,114 @@
+import * as cdk from "aws-cdk-lib";
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as logs from "aws-cdk-lib/aws-logs";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import type { Construct } from "constructs";
+import { ServiceStack, type ServiceStackProps } from "../base-stack";
+import * as path from "path";
+
+/**
+ * HealthStack — deploys the health-check microservice.
+ *
+ * Resources created:
+ * - Lambda function: handles GET /health
+ * - API Gateway (RestApi): dedicated gateway for this service — NOT shared
+ * - CloudWatch Log Group: for Lambda function logs
+ *
+ * Each service owns its own API Gateway per project convention.
+ */
+export class HealthStack extends ServiceStack {
+  /** The URL of the deployed API Gateway endpoint */
+  public readonly apiUrl: string;
+
+  constructor(scope: Construct, id: string, props: ServiceStackProps) {
+    super(scope, id, props);
+
+    // -------------------------------------------------------------------------
+    // CloudWatch Log Group for Lambda logs
+    // -------------------------------------------------------------------------
+    const logGroup = new logs.LogGroup(this, "HealthFunctionLogGroup", {
+      logGroupName: `/aws/lambda/{{projectName}}-health-${this.stage}`,
+      retention: this.logRetention(),
+      removalPolicy: this.removalPolicy,
+    });
+
+    // -------------------------------------------------------------------------
+    // Lambda function — health check handler
+    // -------------------------------------------------------------------------
+    const healthFn = new NodejsFunction(this, "HealthFunction", {
+      functionName: this.resourceName("{{projectName}}-health"),
+      runtime: lambda.Runtime.NODEJS_22_X,
+      entry: path.resolve(
+        __dirname,
+        "../../../../services/health/src/handlers/health.ts"
+      ),
+      handler: "handler",
+      memorySize: this.config.lambdaMemoryMb,
+      timeout: cdk.Duration.seconds(this.config.lambdaTimeoutSecs),
+      tracing: this.config.tracingEnabled
+        ? lambda.Tracing.ACTIVE
+        : lambda.Tracing.DISABLED,
+      logGroup,
+      environment: {
+        NODE_ENV: this.stage === "prod" ? "production" : "development",
+        STAGE: this.stage,
+      },
+      bundling: {
+        // Exclude aws-sdk — provided by the Lambda runtime
+        externalModules: ["@aws-sdk/*"],
+        minify: this.stage === "prod",
+        sourceMap: this.stage !== "prod",
+      },
+    });
+
+    // -------------------------------------------------------------------------
+    // API Gateway — dedicated RestApi for the health service
+    // -------------------------------------------------------------------------
+    const api = new apigateway.RestApi(this, "HealthApi", {
+      restApiName: this.resourceName("{{projectName}}-health-api"),
+      description: "Health check service for {{projectName}}",
+      deployOptions: {
+        stageName: this.stage,
+        loggingLevel: apigateway.MethodLoggingLevel.ERROR,
+        dataTraceEnabled: false,
+        metricsEnabled: true,
+      },
+      // TODO: Restrict allowOrigins to your domain(s) before deploying to production.
+      // e.g. allowOrigins: this.stage === "prod" ? ["https://yourdomain.com"] : apigateway.Cors.ALL_ORIGINS
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: [
+          "Content-Type",
+          "Authorization",
+          "X-Requested-With",
+        ],
+      },
+    });
+
+    // GET /health
+    const healthResource = api.root.addResource("health");
+    healthResource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(healthFn, { proxy: true })
+    );
+
+    // -------------------------------------------------------------------------
+    // Stack outputs
+    // -------------------------------------------------------------------------
+    this.apiUrl = api.url;
+
+    new cdk.CfnOutput(this, "HealthApiUrl", {
+      value: api.url,
+      description: "Health service API Gateway URL",
+      exportName: `{{projectName}}-HealthApiUrl-${this.stage}`,
+    });
+
+    new cdk.CfnOutput(this, "HealthFunctionArn", {
+      value: healthFn.functionArn,
+      description: "Health Lambda function ARN",
+      exportName: `{{projectName}}-HealthFunctionArn-${this.stage}`,
+    });
+  }
+}

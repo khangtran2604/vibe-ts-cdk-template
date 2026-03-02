@@ -1,0 +1,76 @@
+/**
+ * Per-stage deployment configuration for {{projectName}}.
+ *
+ * Each stage maps to a distinct set of infrastructure settings. Values here
+ * are intentional defaults — override via environment variables or SSM
+ * parameters for production secrets.
+ */
+
+export interface StageConfig {
+  /** AWS region to deploy into */
+  region: string;
+  /** Human-readable stage label (dev | staging | prod) */
+  stage: string;
+  /**
+   * Whether non-production removal policies (DESTROY) are permitted.
+   * Always false in prod to protect stateful resources.
+   */
+  isDev: boolean;
+  /** Lambda memory allocation in MB */
+  lambdaMemoryMb: number;
+  /** Lambda function timeout in seconds */
+  lambdaTimeoutSecs: number;
+  /** Minimum number of Lambda reserved concurrency units (0 = no reservation) */
+  lambdaReservedConcurrency: number;
+  /** Whether to enable X-Ray tracing on Lambda functions */
+  tracingEnabled: boolean;
+  /** Log retention in days */
+  logRetentionDays: number;
+}
+
+const BASE_CONFIG = {
+  region: "{{awsRegion}}",
+  lambdaMemoryMb: 256,
+  lambdaTimeoutSecs: 29,
+} as const;
+
+const STAGE_CONFIGS: Record<string, StageConfig> = {
+  dev: {
+    ...BASE_CONFIG,
+    stage: "dev",
+    isDev: true,
+    lambdaReservedConcurrency: 0,
+    tracingEnabled: false,
+    logRetentionDays: 7,
+  },
+  staging: {
+    ...BASE_CONFIG,
+    stage: "staging",
+    isDev: false,
+    lambdaReservedConcurrency: 5,
+    tracingEnabled: true,
+    logRetentionDays: 30,
+  },
+  prod: {
+    ...BASE_CONFIG,
+    stage: "prod",
+    isDev: false,
+    lambdaReservedConcurrency: 10,
+    tracingEnabled: true,
+    logRetentionDays: 90,
+  },
+};
+
+/**
+ * Returns the {@link StageConfig} for the given stage name.
+ *
+ * Falls back to the "dev" config when an unrecognised stage is supplied so
+ * that experimental stage names (e.g. feature-branch deploys) never crash the
+ * CDK app.
+ *
+ * @param stage - The stage name from CDK context (e.g. "dev", "staging", "prod").
+ * @returns The resolved stage configuration.
+ */
+export function getStageConfig(stage: string): StageConfig {
+  return STAGE_CONFIGS[stage] ?? { ...STAGE_CONFIGS["dev"]!, stage, isDev: true };
+}

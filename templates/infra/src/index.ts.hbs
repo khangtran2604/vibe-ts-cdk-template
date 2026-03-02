@@ -1,0 +1,52 @@
+#!/usr/bin/env node
+import * as cdk from "aws-cdk-lib";
+import { getStageConfig } from "./config";
+import { HealthStack } from "./stacks/modules/health-stack";
+import { UsersStack } from "./stacks/modules/users-stack";
+// @feature:database import { DatabaseStack } from "./stacks/modules/database-stack";
+// @feature:monitoring import { MonitoringStack } from "./stacks/modules/monitoring-stack";
+// @feature:auth import { AuthStack } from "./stacks/modules/auth-stack";
+// @feature:frontend import { FrontendStack } from "./stacks/modules/frontend-stack";
+
+const app = new cdk.App();
+
+/**
+ * Read the deployment stage from CDK context.
+ *
+ * Usage:
+ *   cdk deploy --context stage=prod
+ *   cdk deploy --context stage=staging
+ *   cdk deploy --context stage=dev   (default)
+ */
+const stage = (app.node.tryGetContext("stage") as string | undefined) ?? "dev";
+const config = getStageConfig(stage);
+
+const env: cdk.Environment = {
+  account: process.env["CDK_DEFAULT_ACCOUNT"],
+  region: config.region,
+};
+
+const stackProps: cdk.StackProps = { env };
+
+// ---------------------------------------------------------------------------
+// Service stacks — each service gets its own API Gateway
+// ---------------------------------------------------------------------------
+
+new HealthStack(app, `{{projectName}}-HealthStack-${stage}`, {
+  ...stackProps,
+  stage,
+  config,
+});
+
+new UsersStack(app, `{{projectName}}-UsersStack-${stage}`, {
+  ...stackProps,
+  stage,
+  config,
+});
+
+// @feature:database const dbStack = new DatabaseStack(app, `{{projectName}}-DatabaseStack-${stage}`, { ...stackProps, stage, config });
+// @feature:auth new AuthStack(app, `{{projectName}}-AuthStack-${stage}`, { ...stackProps, stage, config });
+// @feature:frontend new FrontendStack(app, `{{projectName}}-FrontendStack-${stage}`, { ...stackProps, stage, config });
+// @feature:monitoring new MonitoringStack(app, `{{projectName}}-MonitoringStack-${stage}`, { ...stackProps, stage, config });
+
+app.synth();

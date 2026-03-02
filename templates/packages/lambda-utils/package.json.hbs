@@ -1,0 +1,27 @@
+{
+  "name": "@{{projectName}}/lambda-utils",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "devDependencies": {
+    "@{{projectName}}/tsconfig": "workspace:*",
+    "@types/aws-lambda": "8.10.161",
+    "@types/node": "22.x",
+    "hono": "4.12.3",
+    "typescript": "5.9.3",
+    "vitest": "4.0.18"
+  }
+}

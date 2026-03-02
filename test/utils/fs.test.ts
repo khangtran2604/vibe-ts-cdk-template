@@ -251,6 +251,48 @@ describe("processConditionals", () => {
     });
   });
 
+  describe("indented annotations", () => {
+    it("removes an indented feature line when the feature is disabled", () => {
+      const input = "  // @feature:database const user = await repo.find(id);";
+      const result = processConditionals(input, ALL_OFF);
+      expect(result).toBe("");
+    });
+
+    it("keeps an indented feature line with original indentation when enabled", () => {
+      const input = "  // @feature:database const user = await repo.find(id);";
+      const result = processConditionals(input, { ...ALL_OFF, database: true });
+      expect(result).toBe("  const user = await repo.find(id);");
+    });
+
+    it("handles tab-indented annotations", () => {
+      const input = "\t// @feature:database const user = await repo.find(id);";
+      const result = processConditionals(input, { ...ALL_OFF, database: true });
+      expect(result).toBe("\tconst user = await repo.find(id);");
+    });
+
+    it("mixes indented and top-level annotations correctly", () => {
+      const input = [
+        "// @feature:database import { repo } from './repo.js';",
+        "export async function handler() {",
+        "  // @feature:database const user = await repo.find('1');",
+        "  const user = store.get('1');",
+        "}",
+      ].join("\n");
+
+      // database off: both @feature:database lines removed
+      const resultOff = processConditionals(input, ALL_OFF);
+      expect(resultOff).toBe(
+        "export async function handler() {\n  const user = store.get('1');\n}"
+      );
+
+      // database on: annotations stripped, code + indentation kept
+      const resultOn = processConditionals(input, { ...ALL_OFF, database: true });
+      expect(resultOn).toBe(
+        "import { repo } from './repo.js';\nexport async function handler() {\n  const user = await repo.find('1');\n  const user = store.get('1');\n}"
+      );
+    });
+  });
+
   describe("edge cases", () => {
     it("handles an empty string", () => {
       expect(processConditionals("", ALL_ON)).toBe("");

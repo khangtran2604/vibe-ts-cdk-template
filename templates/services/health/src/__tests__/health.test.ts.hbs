@@ -1,0 +1,40 @@
+import { describe, it, expect } from "vitest";
+import { createMockEvent } from "@{{projectName}}/lambda-utils";
+import { handler } from "../handlers/health.js";
+
+describe("health handler", () => {
+  it("returns statusCode 200", async () => {
+    const event = createMockEvent({ httpMethod: "GET", path: "/health" });
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(200);
+  });
+
+  it('returns body with status "ok"', async () => {
+    const event = createMockEvent({ httpMethod: "GET", path: "/health" });
+    const result = await handler(event);
+
+    const body = JSON.parse(result.body) as { status: string; timestamp: string };
+    expect(body.status).toBe("ok");
+  });
+
+  it("returns body with an ISO-8601 timestamp", async () => {
+    const before = Date.now();
+    const event = createMockEvent({ httpMethod: "GET", path: "/health" });
+    const result = await handler(event);
+    const after = Date.now();
+
+    const body = JSON.parse(result.body) as { status: string; timestamp: string };
+    const ts = new Date(body.timestamp).getTime();
+
+    expect(ts).toBeGreaterThanOrEqual(before);
+    expect(ts).toBeLessThanOrEqual(after);
+  });
+
+  it("sets Content-Type: application/json header", async () => {
+    const event = createMockEvent({ httpMethod: "GET", path: "/health" });
+    const result = await handler(event);
+
+    expect(result.headers?.["Content-Type"]).toBe("application/json");
+  });
+});

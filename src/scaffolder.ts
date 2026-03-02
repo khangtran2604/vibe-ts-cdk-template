@@ -106,14 +106,21 @@ function buildWorkspaceYaml(entries: string[]): string {
 
 /**
  * Template dirs that should be placed inside a same-named subdirectory rather
- * than merged into the project root.  Currently only "services" falls into
- * this category — the template contains health/ and users/ inside it, and
- * `services/*` is the workspace glob.
+ * than merged into the project root.
+ *
+ * - "services"    → projectDir/services/   (workspace glob: services/*)
+ * - "infra"       → projectDir/infra/       (workspace member: infra)
+ * - "dev-gateway" → projectDir/dev-gateway/ (workspace member: dev-gateway)
+ * - "packages"    → projectDir/packages/    (workspace glob: packages/*)
+ *
+ * Template directories NOT in this set (base, frontend, auth, e2e, database,
+ * cicd, monitoring, extras) are merged directly into the project root so their
+ * contents appear at the correct top-level paths.
  *
  * Expressed as a module-level constant so future additions are trivial and
  * the set is only allocated once across all scaffold() invocations.
  */
-const SUBDIR_TEMPLATE_DIRS = new Set(["services"]);
+const SUBDIR_TEMPLATE_DIRS = new Set(["services", "infra", "dev-gateway", "packages"]);
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -170,14 +177,15 @@ export async function scaffold(config: ProjectConfig): Promise<void> {
   // Step 4: Copy template directories.
   //
   // Each template dir is copied to either:
-  //   - The project root  (base, infra, dev-gateway, packages, frontend, auth,
-  //                        e2e, database, cicd, monitoring, extras)
-  //   - A named subdirectory (services → projectDir/services)
+  //   - A named subdirectory (infra, services, dev-gateway, packages)
+  //     → see SUBDIR_TEMPLATE_DIRS above
+  //   - The project root  (base, frontend, auth, e2e, database, cicd,
+  //                        monitoring, extras)
   //
-  // "services" must land in its own subdirectory because services/* is a
-  // workspace glob — the template contains health/ and users/ inside it.
-  // All other template dirs are merged directly into the project root so their
-  // contents appear at the expected paths (e.g. infra/lib/stack.ts).
+  // Subdirectory template dirs land inside a same-named folder so their
+  // contents appear at the expected workspace paths (e.g. infra/src/index.ts,
+  // services/health/src/index.ts).  Root template dirs are merged directly
+  // into the project root.
   // -------------------------------------------------------------------------
 
   const copySpinner = clack.spinner();

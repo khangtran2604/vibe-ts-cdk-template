@@ -1,0 +1,24 @@
+/**
+ * Local development server for the health microservice.
+ *
+ * This file is NOT deployed to Lambda. It wraps the Lambda handler with Hono
+ * and @hono/node-server to provide a local HTTP server during development.
+ *
+ * Run with:  pnpm dev   (uses tsx watch for hot reload)
+ */
+
+import { Hono } from "hono";
+import { serve } from "@hono/node-server";
+import { lambdaToHono } from "@{{projectName}}/lambda-utils";
+import { handler } from "./handlers/health.js";
+
+const app = new Hono();
+
+// Route all requests through the Lambda handler via the adapter.
+app.all("*", lambdaToHono(handler));
+
+const PORT = 3001;
+
+serve({ fetch: app.fetch, port: PORT }, () => {
+  console.log(`[health] dev server listening on http://localhost:${PORT}`);
+});
