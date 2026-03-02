@@ -1,0 +1,32 @@
+{
+  "name": "vibe-ts-cdk-template",
+  "version": "0.1.0",
+  "description": "CLI scaffolding tool that generates a full-stack TypeScript monorepo for AWS (CDK + Lambda + API Gateway + Vite React + Cognito)",
+  "type": "module",
+  "bin": {
+    "vibe-ts-cdk-template": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.0.1",
+    "commander": "14.0.3"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "4.0.18",
+    "tsup": "8.5.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vitest": "4.0.18"
+  }
+}

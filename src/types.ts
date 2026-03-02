@@ -1,0 +1,56 @@
+/**
+ * The three project complexity presets offered by the CLI.
+ *
+ * - minimal  – CDK + Lambda + API Gateway only
+ * - standard – adds Vite/React frontend, Cognito auth, and Playwright e2e
+ * - full     – adds DynamoDB/RDS, GitHub Actions CI/CD, CloudWatch monitoring,
+ *              and Husky/lint-staged git hooks
+ */
+export type Preset = "minimal" | "standard" | "full";
+
+/**
+ * Feature flags derived from the chosen preset (and any overrides the user
+ * selects during prompts).  Each flag controls whether the corresponding
+ * template directory is copied into the generated project.
+ *
+ * Kept intentionally flat — no nested objects — so they are trivial to
+ * spread, serialize, and pass through the scaffolder pipeline.
+ */
+export interface FeatureFlags {
+  /** Vite + React frontend application (standard+) */
+  frontend: boolean;
+  /** Cognito user-pool authorizer (standard+) */
+  auth: boolean;
+  /** Playwright end-to-end test suite (standard+) */
+  e2e: boolean;
+  /** DynamoDB table constructs (full) */
+  database: boolean;
+  /** RDS (Aurora Serverless v2) constructs — requires database:true (full) */
+  rds: boolean;
+  /** GitHub Actions CI/CD workflows (full) */
+  cicd: boolean;
+  /** CloudWatch dashboards and alarms (full) */
+  monitoring: boolean;
+  /** Husky + lint-staged pre-commit hooks (full) */
+  hooks: boolean;
+}
+
+/**
+ * The single configuration object passed from the interactive-prompt phase to
+ * the scaffolding engine.  Every piece of user-supplied information lives here
+ * so the scaffolder is a pure function of this config.
+ */
+export interface ProjectConfig {
+  /** Slugified directory name for the generated project (e.g. "my-app") */
+  projectName: string;
+  /** Complexity preset selected by the user */
+  preset: Preset;
+  /** AWS region to target (e.g. "us-east-1") */
+  awsRegion: string;
+  /** Resolved feature flags for this configuration */
+  features: FeatureFlags;
+  /** Whether to run `git init` in the generated project */
+  gitInit: boolean;
+  /** Whether to run `pnpm install` after scaffolding */
+  installDeps: boolean;
+}

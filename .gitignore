@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Packed tarballs
+*.tgz
+
+# macOS metadata
+.DS_Store
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary files
+tmp/
+temp/
+
+# NOTE: The templates/ directory must not be ignored — it contains
+# dotfile templates prefixed with _ (e.g., _gitignore → .gitignore)
+# and is shipped as part of the CLI package.
