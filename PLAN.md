@@ -162,7 +162,7 @@ my-app/
 vibe-ts-cdk-template/                   # This repo
 ├── package.json                        # bin: "vibe-ts-cdk-template" → dist/index.js
 ├── tsconfig.json
-├── tsup.config.ts                      # ESM, node18, shebang banner
+├── tsup.config.ts                      # ESM, node24, shebang banner
 │
 ├── src/                                # CLI source code
 │   ├── index.ts                        # Entry: commander args + clack prompts + scaffold
