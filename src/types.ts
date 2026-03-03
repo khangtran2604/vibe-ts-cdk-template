@@ -54,3 +54,23 @@ export interface ProjectConfig {
   /** Whether to run `pnpm install` after scaffolding */
   installDeps: boolean;
 }
+
+/**
+ * Configuration for generating a new CRUD service module inside an existing
+ * scaffolded project.  Produced by the module prompts and consumed by the
+ * module generator engine.
+ */
+export interface ModuleConfig {
+  /** kebab-case module name, e.g. "order-items" */
+  moduleName: string;
+  /** PascalCase singular entity name, e.g. "OrderItem" */
+  entityName: string;
+  /** Dev-server port (auto-assigned), e.g. 3003 */
+  port: number;
+  /** Absolute path to the scaffolded project root */
+  projectDir: string;
+  /** Project name from root package.json */
+  projectName: string;
+  /** Whether to run pnpm install after generation */
+  installDeps: boolean;
+}
