@@ -12,6 +12,8 @@ import { Command, InvalidArgumentError } from "commander";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CLI_NAME, CLI_VERSION, DEFAULT_REGION } from "./constants.js";
+import { generateModule } from "./module-generator.js";
+import { runModulePrompts } from "./module-prompts.js";
 import { type CliFlags, runPrompts } from "./prompts.js";
 import { scaffold } from "./scaffolder.js";
 import type { Preset } from "./types.js";
@@ -41,6 +43,12 @@ function parsePreset(value: string): Preset {
  */
 export function createProgram(): Command {
   const program = new Command();
+
+  // Enable positional options so that parent-level options (e.g. -y,
+  // --no-install) stop being parsed once a subcommand is matched.  Without
+  // this, Commander absorbs shared option names into the parent scope and
+  // the subcommand action never sees them.
+  program.enablePositionalOptions();
 
   program
     .name(CLI_NAME)
@@ -124,6 +132,39 @@ export function createProgram(): Command {
 
       clack.outro(`Done! Next steps:\n${nextSteps.join("\n")}`);
     });
+
+  // -------------------------------------------------------------------------
+  // Subcommand: module
+  // -------------------------------------------------------------------------
+  const moduleCommand = new Command("module")
+    .description("Generate a new CRUD service module in an existing project")
+    .argument("<name>", "Module name in kebab-case (e.g., orders, order-items)")
+    .option("--no-install", "Skip pnpm install after generation")
+    .option("-y, --yes", "Accept all defaults", false)
+    .action(async (name: string, options: { install: boolean; yes: boolean }) => {
+      try {
+        const config = await runModulePrompts(name, options);
+
+        const onSigint = () => {
+          clack.outro("Module generation cancelled.");
+          process.exit(0);
+        };
+        process.on("SIGINT", onSigint);
+        try {
+          await generateModule(config);
+        } finally {
+          process.off("SIGINT", onSigint);
+        }
+
+        clack.outro(`Module "${name}" generated successfully!`);
+      } catch (err: unknown) {
+        clack.log.error(err instanceof Error ? err.message : String(err));
+        clack.outro("Module generation failed.");
+        process.exit(1);
+      }
+    });
+
+  program.addCommand(moduleCommand);
 
   return program;
 }
