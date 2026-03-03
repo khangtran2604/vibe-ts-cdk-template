@@ -10,8 +10,9 @@
  *  3. Create the project directory.
  *  4. Copy template directories in the order prescribed by getTemplateDirs().
  *  5. Write pnpm-workspace.yaml programmatically.
- *  6. Optionally run git init.
- *  7. Optionally run pnpm install.
+ *  6. Write README.md programmatically.
+ *  7. Optionally run git init.
+ *  8. Optionally run pnpm install.
  *
  * Error policy: errors propagate to the caller (src/index.ts handles the outer
  * try/catch).  Nothing is swallowed silently.
@@ -30,6 +31,7 @@ import {
   getVariableMap,
   getWorkspaceEntries,
 } from "./template-helpers.js";
+import { generateReadme } from "./utils/readme.js";
 import type { ProjectConfig } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -225,7 +227,17 @@ export async function scaffold(config: ProjectConfig): Promise<void> {
   logger.success("pnpm-workspace.yaml written.");
 
   // -------------------------------------------------------------------------
-  // Step 6: Optional git init.
+  // Step 6: Write README.md programmatically.
+  //
+  // Like pnpm-workspace.yaml, the README varies by preset and feature flags
+  // so it is generated in code rather than from a template.
+  // -------------------------------------------------------------------------
+  const readmeContent = generateReadme(config);
+  await writeFile(join(projectDir, "README.md"), readmeContent, "utf8");
+  logger.success("README.md written.");
+
+  // -------------------------------------------------------------------------
+  // Step 7: Optional git init.
   // -------------------------------------------------------------------------
   if (config.gitInit) {
     await initGit(projectDir);
@@ -234,7 +246,7 @@ export async function scaffold(config: ProjectConfig): Promise<void> {
   }
 
   // -------------------------------------------------------------------------
-  // Step 7: Optional pnpm install.
+  // Step 8: Optional pnpm install.
   // -------------------------------------------------------------------------
   if (config.installDeps) {
     await installDeps(projectDir);
