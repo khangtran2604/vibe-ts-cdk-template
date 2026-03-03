@@ -7,4 +7,5 @@
 export { lambdaToHono } from "./lambda-adapter.js";
 export type { LambdaHandler } from "./lambda-adapter.js";
 export { errorHandler } from "./middleware/error-handler.js";
+export { localAuth } from "./middleware/local-auth.js";
 export { createMockEvent } from "./test-utils/mock-event.js";

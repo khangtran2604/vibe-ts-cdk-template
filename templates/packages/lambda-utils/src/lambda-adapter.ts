@@ -80,7 +80,7 @@ async function honoContextToEvent(
     requestContext: {
       accountId: "local",
       apiId: "local",
-      authorizer: {},
+      authorizer: c.get("authorizerClaims") ?? {},
       protocol: "HTTP/1.1",
       httpMethod: c.req.method,
       identity: {
