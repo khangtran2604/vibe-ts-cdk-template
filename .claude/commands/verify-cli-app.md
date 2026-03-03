@@ -12,6 +12,8 @@ Resolve these first:
 
 - **PRESET**: The preset name from `$ARGUMENTS` (default `minimal`)
 - **RDS_FLAG**: If `$ARGUMENTS` contains `--rds`, set to `--rds`, else empty
+- **PROTECTED_FLAG**: If PRESET is `standard` or `full`, set to `--protected`, else empty
+- **TEST_TOKEN**: `eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LXVzZXItMTIzIiwidXNlcm5hbWUiOiJ0ZXN0dXNlciJ9.sig` (valid JWT structure with `sub` claim — signature not verified locally)
 - **PROJECT_NAME**: `verify-output-{PRESET}` (e.g., `verify-output-minimal`)
 - **PROJECT_DIR**: `/tmp/{PROJECT_NAME}`
 - **CLI_DIR**: The current working directory (the CLI project root)
@@ -155,7 +157,12 @@ If any scaffold test FAILS, jump to STEP 14 (diagnosis).
 
 ### STEP 10: Generate Module
 
-Run:
+Run (include `--protected` for standard/full presets):
+```bash
+cd {PROJECT_DIR} && node {CLI_DIR}/dist/index.js module orders {PROTECTED_FLAG} -y --no-install
+```
+
+For **minimal** preset, PROTECTED_FLAG is empty so the command is:
 ```bash
 cd {PROJECT_DIR} && node {CLI_DIR}/dist/index.js module orders -y --no-install
 ```
@@ -207,28 +214,111 @@ Verify these files/directories exist in PROJECT_DIR and contain expected content
 | M6 | `infra/src/index.ts` contains `new OrdersStack(` | Instance injected |
 | M7 | `dev-gateway/src/gateway.ts` contains `"/orders"` | Gateway route injected |
 
+**Protected structure checks (standard/full only — SKIP for minimal):**
+
+| # | Check | Description |
+|---|-------|-------------|
+| M8 | `infra/src/stacks/modules/orders-stack.ts` contains `TokenAuthorizer` | CDK authorizer construct |
+| M9 | `infra/src/stacks/modules/orders-stack.ts` contains `Fn.importValue` | Auth stack ARN imported |
+| M10 | `infra/src/stacks/modules/orders-stack.ts` contains `authorizationType` | Method auth options set |
+| M11 | `services/orders/src/app.ts` contains `localAuth` | Local auth middleware imported |
+| M12 | `services/orders/src/app.ts` contains `auth,` | Auth middleware applied to routes |
+
 #### 13b. API Tests via Gateway (port 3000)
 
-| # | Method | URL | Body | Expected Status | Expected Body Contains |
-|---|--------|-----|------|----------------|----------------------|
-| M8 | GET | `http://localhost:3000/orders` | — | 200 | `"items"` |
-| M9 | POST | `http://localhost:3000/orders` | `{"name":"Test Order"}` | 201 | `"id"` |
-| M10 | GET | `http://localhost:3000/orders/{id}` | — | 200 | `"Test Order"` |
-| M11 | GET | `http://localhost:3000/orders` | — | 200 | `"items"` with 1 entry |
-| M12 | POST | `http://localhost:3000/orders` | `{}` | 400 | `"error"` |
+**IMPORTANT**: For standard/full presets, all orders endpoints are protected. Include `Authorization: Bearer {TEST_TOKEN}` header on every orders request. For minimal preset, no auth header needed.
 
-For test M9, capture the returned `id` from the response body to use in test M10.
+| # | Method | URL | Headers | Body | Expected Status | Expected Body Contains |
+|---|--------|-----|---------|------|----------------|----------------------|
+| M13 | GET | `http://localhost:3000/orders` | Auth header (std/full) | — | 200 | `"items"` |
+| M14 | POST | `http://localhost:3000/orders` | Auth header (std/full) | `{"name":"Test Order"}` | 201 | `"id"` |
+| M15 | GET | `http://localhost:3000/orders/{id}` | Auth header (std/full) | — | 200 | `"Test Order"` |
+| M16 | GET | `http://localhost:3000/orders` | Auth header (std/full) | — | 200 | `"items"` with 1 entry |
+| M17 | POST | `http://localhost:3000/orders` | Auth header (std/full) | `{}` | 400 | `"error"` |
+
+For test M14, capture the returned `id` from the response body to use in test M15.
+
+Curl examples for standard/full (with auth):
+```bash
+curl -s -w "\n%{http_code}" http://localhost:3000/orders -H "Authorization: Bearer {TEST_TOKEN}"
+curl -s -w "\n%{http_code}" -X POST http://localhost:3000/orders -H "Content-Type: application/json" -H "Authorization: Bearer {TEST_TOKEN}" -d '{"name":"Test Order"}'
+```
 
 #### 13c. Regression Tests (existing services still work)
 
 | # | Method | URL | Expected Status | Description |
 |---|--------|-----|----------------|-------------|
-| M13 | GET | `http://localhost:3000/health` | 200 | Health unbroken |
-| M14 | GET | `http://localhost:3000/users` | 200 | Users unbroken |
+| M18 | GET | `http://localhost:3000/health` | 200 | Health unbroken |
+| M19 | GET | `http://localhost:3000/users` | 200 | Users unbroken |
 
-#### 13d. Report Module Results
+#### 13d. Protected Route Auth Tests (standard/full only — SKIP for minimal)
 
-Format results as a second verification table:
+Test the local auth middleware on a protected endpoint (`POST /orders`):
+
+| # | Test | Method | URL | Headers | Expected Status | Expected Body Contains |
+|---|------|--------|-----|---------|----------------|----------------------|
+| P1 | No auth header | POST | `http://localhost:3000/orders` | None | 401 | `"Unauthorized"` |
+| P2 | Invalid token format | POST | `http://localhost:3000/orders` | `Authorization: Bearer not-a-jwt` | 403 | `"not authorized"` |
+| P3 | Valid token succeeds | POST | `http://localhost:3000/orders` | `Authorization: Bearer {TEST_TOKEN}` + body `{"name":"Auth Test"}` | 201 | `"id"` |
+| P4 | Unprotected endpoint still open | GET | `http://localhost:3000/health` | None | 200 | `"status"` |
+
+Curl examples:
+```bash
+# P1: No auth
+curl -s -w "\n%{http_code}" -X POST http://localhost:3000/orders -H "Content-Type: application/json" -d '{"name":"test"}'
+
+# P2: Invalid token
+curl -s -w "\n%{http_code}" -X POST http://localhost:3000/orders -H "Content-Type: application/json" -H "Authorization: Bearer not-a-jwt" -d '{"name":"test"}'
+
+# P3: Valid token
+curl -s -w "\n%{http_code}" -X POST http://localhost:3000/orders -H "Content-Type: application/json" -H "Authorization: Bearer {TEST_TOKEN}" -d '{"name":"Auth Test"}'
+
+# P4: Unprotected endpoint
+curl -s -w "\n%{http_code}" http://localhost:3000/health
+```
+
+#### 13e. Report Module Results
+
+Format results as a second verification table.
+
+**For minimal preset** (M8-M12 and P1-P4 are SKIPped):
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Module Verification Results: minimal preset
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  #   │ Test                       │ Status │ Details
+ ─────┼────────────────────────────┼────────┼──────────
+  M1  │ services/orders/ exists    │ PASS   │ directory
+  M2  │ create.ts exists           │ PASS   │ file
+  M3  │ list.ts exists             │ PASS   │ file
+  M4  │ orders-stack.ts exists     │ PASS   │ file
+  M5  │ OrdersStack import         │ PASS   │ injected
+  M6  │ OrdersStack instance       │ PASS   │ injected
+  M7  │ Gateway /orders route      │ PASS   │ injected
+  M8  │ TokenAuthorizer in stack   │ SKIP   │ minimal preset
+  M9  │ Fn.importValue in stack    │ SKIP   │ minimal preset
+  M10 │ authorizationType in stack │ SKIP   │ minimal preset
+  M11 │ localAuth import in app    │ SKIP   │ minimal preset
+  M12 │ auth middleware in app     │ SKIP   │ minimal preset
+  M13 │ GET /orders                │ PASS   │ 200
+  M14 │ POST /orders               │ PASS   │ 201, created
+  M15 │ GET /orders/:id            │ PASS   │ 200
+  M16 │ GET /orders (with data)    │ PASS   │ 200, 1 item
+  M17 │ POST /orders (invalid)     │ PASS   │ 400
+  M18 │ GET /health (regression)   │ PASS   │ 200
+  M19 │ GET /users (regression)    │ PASS   │ 200
+  P1  │ POST /orders (no auth)    │ SKIP   │ minimal preset
+  P2  │ POST /orders (bad token)  │ SKIP   │ minimal preset
+  P3  │ POST /orders (valid token)│ SKIP   │ minimal preset
+  P4  │ GET /health (unprotected) │ SKIP   │ minimal preset
+
+  Result: 14/14 passed (+ 9 skipped)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**For standard/full presets** (all checks run):
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -244,15 +334,24 @@ Format results as a second verification table:
   M5  │ OrdersStack import         │ PASS   │ injected
   M6  │ OrdersStack instance       │ PASS   │ injected
   M7  │ Gateway /orders route      │ PASS   │ injected
-  M8  │ GET /orders                │ PASS   │ 200
-  M9  │ POST /orders               │ PASS   │ 201, created
-  M10 │ GET /orders/:id            │ PASS   │ 200
-  M11 │ GET /orders (with data)    │ PASS   │ 200, 1 item
-  M12 │ POST /orders (invalid)     │ PASS   │ 400
-  M13 │ GET /health (regression)   │ PASS   │ 200
-  M14 │ GET /users (regression)    │ PASS   │ 200
+  M8  │ TokenAuthorizer in stack   │ PASS   │ found
+  M9  │ Fn.importValue in stack    │ PASS   │ found
+  M10 │ authorizationType in stack │ PASS   │ found
+  M11 │ localAuth import in app    │ PASS   │ found
+  M12 │ auth middleware in app     │ PASS   │ found
+  M13 │ GET /orders                │ PASS   │ 200
+  M14 │ POST /orders               │ PASS   │ 201, created
+  M15 │ GET /orders/:id            │ PASS   │ 200
+  M16 │ GET /orders (with data)    │ PASS   │ 200, 1 item
+  M17 │ POST /orders (invalid)     │ PASS   │ 400
+  M18 │ GET /health (regression)   │ PASS   │ 200
+  M19 │ GET /users (regression)    │ PASS   │ 200
+  P1  │ POST /orders (no auth)    │ PASS   │ 401
+  P2  │ POST /orders (bad token)  │ PASS   │ 403
+  P3  │ POST /orders (valid token)│ PASS   │ 201
+  P4  │ GET /health (unprotected) │ PASS   │ 200
 
-  Result: 14/14 passed
+  Result: 23/23 passed
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -326,3 +425,5 @@ Do NOT remove the generated project directory — the user may want to inspect i
 5. **Service ports**: health=3001, users=3002, orders=3003, gateway=3000, Vite=5173
 6. **Gateway routes**: `/health/*` → localhost:3001, `/users/*` → localhost:3002, `/orders/*` → localhost:3003
 7. **Max 3 fix cycles** — don't loop forever
+8. **Auth testing**: For standard/full presets with `--protected`, orders API tests (M13-M17) must include `Authorization: Bearer {TEST_TOKEN}` header
+9. **TEST_TOKEN**: Use a properly structured JWT with base64-encoded `{"sub":"test-user-123","username":"testuser"}` payload — signature is not verified locally
