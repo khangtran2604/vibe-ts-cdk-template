@@ -41,4 +41,4 @@ Add a `GET /docs/openapi.json` handler to the dev-gateway that reads `dist/opena
 High -- Spec merging with conflict handling requires careful implementation
 
 ## Status
-- [ ] Not Started
+- [x] Complete

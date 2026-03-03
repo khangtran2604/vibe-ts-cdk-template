@@ -35,4 +35,4 @@ Add a `GET /docs` handler to the dev-gateway that serves a minimal HTML page loa
 Low -- Static HTML response with CDN links
 
 ## Status
-- [ ] Not Started
+- [x] Complete

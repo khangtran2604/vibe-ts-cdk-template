@@ -9,13 +9,13 @@ Phase 4 complete -- services must have OpenAPI spec generation in place so the g
 ## Tasks
 | # | Task | Complexity | Dependencies | Status |
 |---|------|-----------|--------------|--------|
-| 5.1 | Add OpenAPI spec aggregation endpoint | High | 4.3, 4.5 | ⬜ Not Started |
-| 5.2 | Add Swagger UI HTML endpoint | Low | 5.1 | ⬜ Not Started |
+| 5.1 | Add OpenAPI spec aggregation endpoint | High | 4.3, 4.5 | ✅ Complete |
+| 5.2 | Add Swagger UI HTML endpoint | Low | 5.1 | ✅ Complete |
 
 ## Phase Completion Criteria
-- [ ] `GET /docs/openapi.json` returns a merged OpenAPI 3.1 spec from all services
-- [ ] `GET /docs` serves Swagger UI HTML that loads the merged spec
-- [ ] Schema name conflicts between services are handled (prefixed with service name)
-- [ ] Swagger UI loads from CDN (unpkg.com/swagger-ui-dist@5)
+- [x] `GET /docs/openapi.json` returns a merged OpenAPI 3.1 spec from all services
+- [x] `GET /docs` serves Swagger UI HTML that loads the merged spec
+- [x] Schema name conflicts between services are handled (prefixed with service name)
+- [x] Swagger UI loads from CDN (unpkg.com/swagger-ui-dist@5)
 
-## Progress: 0/2 tasks complete
+## Progress: 2/2 tasks complete
