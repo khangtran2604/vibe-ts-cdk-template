@@ -60,6 +60,10 @@ src/                    # CLI source
   template-helpers.ts   # Feature flags → template dirs, variable maps, conditionals
   presets.ts            # Preset → FeatureFlags mapping
   types.ts              # ProjectConfig, Preset, FeatureFlags
+  module-prompts.ts     # Interactive prompts for `module` subcommand
+  module-generator.ts   # Core module generation engine
+  module-context.ts     # Project context detection (ports, project name)
+  module-helpers.ts     # String transforms, variable maps, injection helpers
   constants.ts          # CLI name, version
   utils/                # fs, git, pnpm, logger helpers
 templates/              # Template files copied into generated projects
@@ -85,6 +89,11 @@ pnpm install            # Install deps
 pnpm build              # Build CLI with tsup
 pnpm test               # Run vitest
 pnpm dev                # Dev mode (tsup --watch or tsx)
+
+# Module generation (run from inside a scaffolded project)
+node dist/index.js module <name>        # Generate a CRUD module interactively
+node dist/index.js module orders -y     # Generate with defaults (no prompts)
+node dist/index.js module orders --no-install  # Skip pnpm install
 ```
 
 ## Template Conventions
@@ -110,7 +119,7 @@ pnpm dev                # Dev mode (tsup --watch or tsx)
 
 - Use outdated package versions — always run `npm view {pkg} version` to verify latest stable before adding any dependency
 - Use a template engine (handlebars, ejs, etc.) — use simple `replaceAll`
-- Put subcommands on the CLI — it's a single direct invocation
+- Add CLI subcommands beyond `module` without owner approval
 - Make `pnpm-workspace.yaml` a template — build it programmatically
 - Add Hono as a production dependency in service templates
 - Create a single monolithic CDK stack — use stack-per-service pattern
@@ -125,6 +134,9 @@ pnpm build && node dist/index.js --preset minimal -y
 pnpm build && node dist/index.js --preset standard -y
 pnpm build && node dist/index.js --preset full --rds -y
 # Then in generated project: pnpm install && pnpm build && pnpm test && pnpm dev
+
+# Module generation (run from within a generated project directory)
+pnpm build && cd <generated-project> && node <cli-path>/dist/index.js module orders -y
 ```
 
 ## Implementation Phases

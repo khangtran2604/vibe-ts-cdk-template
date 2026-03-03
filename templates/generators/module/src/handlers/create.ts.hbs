@@ -1,0 +1,93 @@
+/**
+ * Create-{{entityNameLower}} Lambda handler.
+ *
+ * This is the primary production entry point deployed to AWS Lambda.
+ * It has zero framework dependencies — only the aws-lambda types (dev-only).
+ *
+ * POST /{{moduleName}}
+ * Body: { name: string }
+ *
+ * Responses:
+ *   201 — {{entityNameLower}} created successfully
+ *   400 — request body is missing or malformed
+ */
+
+import type {
+  APIGatewayProxyEvent,
+  APIGatewayProxyResult,
+} from "aws-lambda";
+import type { Create{{EntityName}}Body, {{EntityName}} } from "../types/index.js";
+import { {{entityNameLower}}Repository } from "../db/repository.js";
+
+const HEADERS = { "Content-Type": "application/json" } as const;
+
+/**
+ * Handles POST /{{moduleName}} — creates a new {{entityNameLower}} and persists it via the repository.
+ *
+ * @param event - API Gateway proxy event.
+ * @returns 201 with the created {{entityNameLower}}, or 400 if the body is invalid.
+ */
+export async function handler(
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> {
+  // Parse and validate request body.
+  let body: Create{{EntityName}}Body;
+  try {
+    if (!event.body) {
+      throw new Error("Request body is required");
+    }
+    body = JSON.parse(event.body) as Create{{EntityName}}Body;
+  } catch {
+    return {
+      statusCode: 400,
+      headers: HEADERS,
+      body: JSON.stringify({
+        success: false,
+        error: {
+          code: "BAD_REQUEST",
+          message: "Request body must be valid JSON",
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    };
+  }
+
+  const { name } = body;
+
+  if (typeof name !== "string" || name.trim() === "") {
+    return {
+      statusCode: 400,
+      headers: HEADERS,
+      body: JSON.stringify({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Field 'name' is required and must be a non-empty string",
+          fieldErrors: { name: "Required" },
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    };
+  }
+
+  const now = new Date().toISOString();
+  const item: {{EntityName}} = {
+    id: crypto.randomUUID(),
+    name: name.trim(),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await {{entityNameLower}}Repository.create(item);
+
+  return {
+    statusCode: 201,
+    headers: HEADERS,
+    body: JSON.stringify({
+      success: true,
+      data: item,
+      message: "{{EntityName}} created successfully",
+      timestamp: now,
+    }),
+  };
+}

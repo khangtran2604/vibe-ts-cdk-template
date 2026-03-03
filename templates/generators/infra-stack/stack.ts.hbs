@@ -1,0 +1,178 @@
+import * as cdk from "aws-cdk-lib";
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as logs from "aws-cdk-lib/aws-logs";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import type { Construct } from "constructs";
+import { ServiceStack, type ServiceStackProps } from "../base-stack";
+import * as path from "path";
+
+/**
+ * {{ModuleName}}Stack — deploys the {{moduleName}} microservice.
+ *
+ * Resources created:
+ * - Lambda functions: list, get, create, update, delete handlers
+ * - API Gateway (RestApi): dedicated gateway for this service — NOT shared
+ * - CloudWatch Log Group: for Lambda function logs
+ *
+ * Route mapping:
+ *   GET    /{{moduleName}}          → list{{ModuleName}}
+ *   POST   /{{moduleName}}          → create{{EntityName}}
+ *   GET    /{{moduleName}}/{id}     → get{{EntityName}}
+ *   PUT    /{{moduleName}}/{id}     → update{{EntityName}}
+ *   DELETE /{{moduleName}}/{id}     → delete{{EntityName}}
+ *
+ * Each service owns its own API Gateway per project convention.
+ */
+export class {{ModuleName}}Stack extends ServiceStack {
+  /** The URL of the deployed API Gateway endpoint */
+  public readonly apiUrl: string;
+
+  constructor(scope: Construct, id: string, props: ServiceStackProps) {
+    super(scope, id, props);
+
+    // -------------------------------------------------------------------------
+    // CloudWatch Log Group for Lambda logs
+    // -------------------------------------------------------------------------
+    const logGroup = new logs.LogGroup(this, "{{ModuleName}}FunctionLogGroup", {
+      logGroupName: `/aws/lambda/{{projectName}}-{{moduleName}}-${this.stage}`,
+      retention: this.logRetention(),
+      removalPolicy: this.removalPolicy,
+    });
+
+    // -------------------------------------------------------------------------
+    // Shared Lambda props — applied to every function in this stack
+    // -------------------------------------------------------------------------
+    const sharedFnProps = {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      memorySize: this.config.lambdaMemoryMb,
+      timeout: cdk.Duration.seconds(this.config.lambdaTimeoutSecs),
+      tracing: this.config.tracingEnabled
+        ? lambda.Tracing.ACTIVE
+        : lambda.Tracing.DISABLED,
+      logGroup,
+      environment: {
+        NODE_ENV: this.stage === "prod" ? "production" : "development",
+        STAGE: this.stage,
+      },
+      bundling: {
+        // Exclude aws-sdk — provided by the Lambda runtime
+        externalModules: ["@aws-sdk/*"],
+        minify: this.stage === "prod",
+        sourceMap: this.stage !== "prod",
+      },
+    } satisfies Partial<ConstructorParameters<typeof NodejsFunction>[2]>;
+
+    const handlerRoot = path.resolve(
+      __dirname,
+      "../../../../services/{{moduleName}}/src/handlers"
+    );
+
+    // -------------------------------------------------------------------------
+    // Lambda functions — one per CRUD operation
+    // -------------------------------------------------------------------------
+    const list{{ModuleName}}Fn = new NodejsFunction(this, "List{{ModuleName}}Function", {
+      functionName: this.resourceName("{{projectName}}-{{moduleName}}-list"),
+      entry: path.join(handlerRoot, "list.ts"),
+      handler: "handler",
+      ...sharedFnProps,
+    });
+
+    const get{{EntityName}}Fn = new NodejsFunction(this, "Get{{EntityName}}Function", {
+      functionName: this.resourceName("{{projectName}}-{{moduleName}}-get"),
+      entry: path.join(handlerRoot, "get.ts"),
+      handler: "handler",
+      ...sharedFnProps,
+    });
+
+    const create{{EntityName}}Fn = new NodejsFunction(this, "Create{{EntityName}}Function", {
+      functionName: this.resourceName("{{projectName}}-{{moduleName}}-create"),
+      entry: path.join(handlerRoot, "create.ts"),
+      handler: "handler",
+      ...sharedFnProps,
+    });
+
+    const update{{EntityName}}Fn = new NodejsFunction(this, "Update{{EntityName}}Function", {
+      functionName: this.resourceName("{{projectName}}-{{moduleName}}-update"),
+      entry: path.join(handlerRoot, "update.ts"),
+      handler: "handler",
+      ...sharedFnProps,
+    });
+
+    const delete{{EntityName}}Fn = new NodejsFunction(this, "Delete{{EntityName}}Function", {
+      functionName: this.resourceName("{{projectName}}-{{moduleName}}-delete"),
+      entry: path.join(handlerRoot, "delete.ts"),
+      handler: "handler",
+      ...sharedFnProps,
+    });
+
+    // -------------------------------------------------------------------------
+    // API Gateway — dedicated RestApi for the {{moduleName}} service
+    // -------------------------------------------------------------------------
+    const api = new apigateway.RestApi(this, "{{ModuleName}}Api", {
+      restApiName: this.resourceName("{{projectName}}-{{moduleName}}-api"),
+      description: "{{ModuleName}} service for {{projectName}}",
+      deployOptions: {
+        stageName: this.stage,
+        loggingLevel: apigateway.MethodLoggingLevel.ERROR,
+        dataTraceEnabled: false,
+        metricsEnabled: true,
+      },
+      // TODO: Restrict allowOrigins to your domain(s) before deploying to production.
+      // e.g. allowOrigins: this.stage === "prod" ? ["https://yourdomain.com"] : apigateway.Cors.ALL_ORIGINS
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: [
+          "Content-Type",
+          "Authorization",
+          "X-Requested-With",
+        ],
+      },
+    });
+
+    // /{{moduleName}}
+    const {{entityNameLower}}Resource = api.root.addResource("{{moduleName}}");
+    {{entityNameLower}}Resource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(list{{ModuleName}}Fn, { proxy: true })
+    );
+    {{entityNameLower}}Resource.addMethod(
+      "POST",
+      new apigateway.LambdaIntegration(create{{EntityName}}Fn, { proxy: true })
+    );
+
+    // /{{moduleName}}/{id}
+    const {{entityNameLower}}ByIdResource = {{entityNameLower}}Resource.addResource("{id}");
+    {{entityNameLower}}ByIdResource.addMethod(
+      "GET",
+      new apigateway.LambdaIntegration(get{{EntityName}}Fn, { proxy: true })
+    );
+    {{entityNameLower}}ByIdResource.addMethod(
+      "PUT",
+      new apigateway.LambdaIntegration(update{{EntityName}}Fn, { proxy: true })
+    );
+    {{entityNameLower}}ByIdResource.addMethod(
+      "DELETE",
+      new apigateway.LambdaIntegration(delete{{EntityName}}Fn, { proxy: true })
+    );
+
+    // -------------------------------------------------------------------------
+    // Stack outputs
+    // -------------------------------------------------------------------------
+    this.apiUrl = api.url;
+
+    new cdk.CfnOutput(this, "{{ModuleName}}ApiUrl", {
+      value: api.url,
+      description: "{{ModuleName}} service API Gateway URL",
+      exportName: `{{projectName}}-{{ModuleName}}ApiUrl-${this.stage}`,
+    });
+
+    new cdk.CfnOutput(this, "List{{ModuleName}}FunctionArn", {
+      value: list{{ModuleName}}Fn.functionArn,
+      description: "List {{moduleName}} Lambda function ARN",
+      exportName: `{{projectName}}-List{{ModuleName}}FunctionArn-${this.stage}`,
+    });
+  }
+
+}

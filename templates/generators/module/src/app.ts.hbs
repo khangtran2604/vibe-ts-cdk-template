@@ -1,0 +1,28 @@
+/**
+ * Hono app for the {{moduleName}} microservice.
+ *
+ * This file is NOT deployed to Lambda.  It wires up the Hono router used by
+ * both the local dev server and the integration tests.
+ *
+ * Each route maps to the corresponding Lambda handler via `lambdaToHono`.
+ * Path parameters (e.g. `:id`) are forwarded to `event.pathParameters` by
+ * the adapter, matching the API Gateway contract.
+ */
+
+import { Hono } from "hono";
+import { lambdaToHono } from "@{{projectName}}/lambda-utils";
+import { handler as create{{EntityName}} } from "./handlers/create.js";
+import { handler as get{{EntityName}} } from "./handlers/get.js";
+import { handler as list{{ModuleName}} } from "./handlers/list.js";
+import { handler as update{{EntityName}} } from "./handlers/update.js";
+import { handler as delete{{EntityName}} } from "./handlers/delete.js";
+
+const app = new Hono();
+
+app.post("/{{moduleName}}", lambdaToHono(create{{EntityName}}));
+app.get("/{{moduleName}}/:id", lambdaToHono(get{{EntityName}}));
+app.get("/{{moduleName}}", lambdaToHono(list{{ModuleName}}));
+app.put("/{{moduleName}}/:id", lambdaToHono(update{{EntityName}}));
+app.delete("/{{moduleName}}/:id", lambdaToHono(delete{{EntityName}}));
+
+export { app };

@@ -18,14 +18,14 @@
  * try/catch).  Nothing is swallowed silently.
  */
 
-import { mkdir, access, writeFile } from "node:fs/promises";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import * as clack from "@clack/prompts";
 import { copyDir } from "./utils/fs.js";
 import { initGit } from "./utils/git.js";
 import { installDeps } from "./utils/pnpm.js";
 import * as logger from "./utils/logger.js";
+import { pathExists, resolveTemplateRoot } from "./utils/paths.js";
 import {
   getTemplateDirs,
   getVariableMap,
@@ -33,49 +33,6 @@ import {
 } from "./template-helpers.js";
 import { generateReadme } from "./utils/readme.js";
 import type { ProjectConfig } from "./types.js";
-
-// ---------------------------------------------------------------------------
-// Template root resolution
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the absolute path to the `templates/` directory at the monorepo
- * root.  Works correctly in both development (ts-node/tsx from src/) and
- * production (dist/index.js, one level below root).
- *
- * `import.meta.dirname` is available in Node 21+ (our target is Node 24) and
- * is equivalent to `path.dirname(fileURLToPath(import.meta.url))`.
- *
- * Layout:
- *   <root>/dist/index.js   → import.meta.dirname = <root>/dist
- *   <root>/templates/      → path.resolve(<root>/dist, "..", "templates")
- */
-function resolveTemplateRoot(): string {
-  // import.meta.dirname is Node 21+ — safe for our Node 24 target.
-  // Fall back to the fileURLToPath approach for defensive coverage.
-  const dir =
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (import.meta as any).dirname ??
-    dirname(fileURLToPath(import.meta.url));
-  return join(dir, "..", "templates");
-}
-
-// ---------------------------------------------------------------------------
-// Directory existence check
-// ---------------------------------------------------------------------------
-
-/**
- * Returns `true` when the path already exists on disk (file or directory).
- * Uses `fs/promises.access` which throws if the path does not exist.
- */
-async function pathExists(p: string): Promise<boolean> {
-  try {
-    await access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // pnpm-workspace.yaml generator

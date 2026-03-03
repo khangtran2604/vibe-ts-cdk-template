@@ -7,6 +7,7 @@ import { UsersStack } from "./stacks/modules/users-stack";
 // @feature:monitoring import { MonitoringStack } from "./stacks/modules/monitoring-stack";
 // @feature:auth import { AuthStack } from "./stacks/modules/auth-stack";
 // @feature:frontend import { FrontendStack } from "./stacks/modules/frontend-stack";
+// @module-inject:import
 
 const app = new cdk.App();
 
@@ -48,5 +49,6 @@ new UsersStack(app, `{{projectName}}-UsersStack-${stage}`, {
 // @feature:auth new AuthStack(app, `{{projectName}}-AuthStack-${stage}`, { ...stackProps, stage, config });
 // @feature:frontend new FrontendStack(app, `{{projectName}}-FrontendStack-${stage}`, { ...stackProps, stage, config });
 // @feature:monitoring new MonitoringStack(app, `{{projectName}}-MonitoringStack-${stage}`, { ...stackProps, stage, config });
+// @module-inject:instance
 
 app.synth();

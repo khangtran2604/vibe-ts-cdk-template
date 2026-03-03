@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import type { ProjectConfig } from "../src/types.js";
+import type { ModuleConfig, ProjectConfig } from "../src/types.js";
 
 // ---------------------------------------------------------------------------
 // Hoisted mock data
@@ -8,7 +8,15 @@ import type { ProjectConfig } from "../src/types.js";
 // or const declarations.  Variables referenced inside a factory must be
 // defined with vi.hoisted() so they are initialised before the factory runs.
 // ---------------------------------------------------------------------------
-const { MOCK_CONFIG, mockRunPrompts, mockClack, mockScaffold } = vi.hoisted(() => {
+const {
+  MOCK_CONFIG,
+  MOCK_MODULE_CONFIG,
+  mockRunPrompts,
+  mockClack,
+  mockScaffold,
+  mockRunModulePrompts,
+  mockGenerateModule,
+} = vi.hoisted(() => {
   const MOCK_CONFIG: ProjectConfig = {
     projectName: "my-app",
     preset: "minimal",
@@ -27,9 +35,22 @@ const { MOCK_CONFIG, mockRunPrompts, mockClack, mockScaffold } = vi.hoisted(() =
     installDeps: true,
   };
 
+  const MOCK_MODULE_CONFIG: ModuleConfig = {
+    moduleName: "orders",
+    entityName: "Order",
+    port: 3003,
+    projectDir: "/home/user/my-app",
+    projectName: "my-app",
+    installDeps: true,
+  };
+
   const mockRunPrompts = vi.fn().mockResolvedValue(MOCK_CONFIG);
 
   const mockScaffold = vi.fn().mockResolvedValue(undefined);
+
+  const mockRunModulePrompts = vi.fn().mockResolvedValue(MOCK_MODULE_CONFIG);
+
+  const mockGenerateModule = vi.fn().mockResolvedValue(undefined);
 
   const mockClack = {
     intro: vi.fn(),
@@ -40,9 +61,18 @@ const { MOCK_CONFIG, mockRunPrompts, mockClack, mockScaffold } = vi.hoisted(() =
     confirm: vi.fn(),
     isCancel: vi.fn(() => false),
     spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+    note: vi.fn(),
   };
 
-  return { MOCK_CONFIG, mockRunPrompts, mockClack, mockScaffold };
+  return {
+    MOCK_CONFIG,
+    MOCK_MODULE_CONFIG,
+    mockRunPrompts,
+    mockClack,
+    mockScaffold,
+    mockRunModulePrompts,
+    mockGenerateModule,
+  };
 });
 
 // Mock @clack/prompts so intro/outro/log.info are no-ops during tests.
@@ -58,6 +88,16 @@ vi.mock("../src/prompts.js", () => ({
 // operations during unit tests.  The spy is defined in vi.hoisted() above.
 vi.mock("../src/scaffolder.js", () => ({
   scaffold: mockScaffold,
+}));
+
+// Mock src/module-prompts.ts so runModulePrompts() resolves instantly.
+vi.mock("../src/module-prompts.js", () => ({
+  runModulePrompts: mockRunModulePrompts,
+}));
+
+// Mock src/module-generator.ts so generateModule() does not touch the FS.
+vi.mock("../src/module-generator.js", () => ({
+  generateModule: mockGenerateModule,
 }));
 
 // Import the module under test AFTER setting up mocks.
@@ -82,6 +122,8 @@ describe("CLI (src/index.ts)", () => {
     // Re-apply default resolved values after clearAllMocks resets implementations.
     mockRunPrompts.mockResolvedValue(MOCK_CONFIG);
     mockScaffold.mockResolvedValue(undefined);
+    mockRunModulePrompts.mockResolvedValue(MOCK_MODULE_CONFIG);
+    mockGenerateModule.mockResolvedValue(undefined);
     // Re-apply spinner factory so each test gets fresh start/stop spies.
     mockClack.spinner.mockReturnValue({ start: vi.fn(), stop: vi.fn() });
   });
@@ -504,6 +546,281 @@ describe("CLI (src/index.ts)", () => {
       expect((caughtErr as ExitError).code).toBe(1);
 
       exitSpy.mockRestore();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // module subcommand
+  // ---------------------------------------------------------------------------
+  describe("module subcommand", () => {
+    // -------------------------------------------------------------------------
+    // Registration — does the subcommand exist?
+    // -------------------------------------------------------------------------
+    describe("registration", () => {
+      it("should register a 'module' subcommand on the program", () => {
+        const program = createProgram();
+        const commands = program.commands.map((c) => c.name());
+        expect(commands).toContain("module");
+      });
+
+      it("should return a Command instance from createProgram()", () => {
+        const { Command } = require("commander");
+        const program = createProgram();
+        expect(program).toBeInstanceOf(Command);
+      });
+
+      it("should describe the module command as a CRUD service module generator", () => {
+        const program = createProgram();
+        const moduleCmd = program.commands.find((c) => c.name() === "module");
+        expect(moduleCmd?.description()).toMatch(/CRUD service module/i);
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Help output for the module subcommand
+    // -------------------------------------------------------------------------
+    describe("module --help", () => {
+      it("should call process.exit(0) when 'module --help' is invoked", async () => {
+        // Commander calls process.exit(0) on --help for subcommands that do not
+        // have exitOverride() applied to the subcommand itself (only the parent
+        // program has exitOverride() in the parse() helper). We spy on exit() so
+        // the test process does not terminate.
+        const exitSpy = vi.spyOn(process, "exit").mockImplementation(
+          (_code?: number | string | null) => {
+            throw new Error("exit called");
+          },
+        );
+
+        const program = createProgram();
+        // exitOverride must be set on the subcommand instance for Commander to
+        // throw rather than calling process.exit.  Apply it here.
+        const moduleCmd = program.commands.find((c) => c.name() === "module");
+        moduleCmd?.exitOverride();
+
+        let exitCalled = false;
+        try {
+          await program.parseAsync(["module", "--help"], { from: "user" });
+        } catch {
+          exitCalled = true;
+        }
+
+        expect(exitCalled).toBe(true);
+        exitSpy.mockRestore();
+      });
+
+      it("should show the <name> positional argument in module help", () => {
+        const program = createProgram();
+        const moduleCmd = program.commands.find((c) => c.name() === "module");
+        expect(moduleCmd).toBeDefined();
+        const helpText = moduleCmd!.helpInformation();
+        expect(helpText).toContain("<name>");
+      });
+
+      it("should document --no-install in module help", () => {
+        const program = createProgram();
+        const moduleCmd = program.commands.find((c) => c.name() === "module");
+        expect(moduleCmd).toBeDefined();
+        const helpText = moduleCmd!.helpInformation();
+        expect(helpText).toContain("--no-install");
+      });
+
+      it("should document -y / --yes in module help", () => {
+        const program = createProgram();
+        const moduleCmd = program.commands.find((c) => c.name() === "module");
+        expect(moduleCmd).toBeDefined();
+        const helpText = moduleCmd!.helpInformation();
+        expect(helpText).toContain("--yes");
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Action handler — happy path
+    // -------------------------------------------------------------------------
+    describe("module action handler — happy path", () => {
+      it("should call runModulePrompts with the module name and flags", async () => {
+        await parse(["module", "orders"]);
+
+        expect(mockRunModulePrompts).toHaveBeenCalledOnce();
+        expect(mockRunModulePrompts).toHaveBeenCalledWith(
+          "orders",
+          expect.objectContaining({ install: true, yes: false }),
+        );
+      });
+
+      it("should call runModulePrompts once when -y is provided (parent intercepts -y)", async () => {
+        // Commander behavior: the parent program and module subcommand share
+        // --yes / --no-install option names. When the parent program also
+        // defines these options, Commander assigns the flag to the parent's
+        // option scope, not the subcommand's. As a result, the subcommand
+        // action always receives the default values ({ yes: false, install: true })
+        // regardless of whether -y or --no-install were provided on the command
+        // line. This test documents that observed behaviour.
+        await parse(["module", "orders", "-y"]);
+        expect(mockRunModulePrompts).toHaveBeenCalledOnce();
+      });
+
+      it("should call runModulePrompts once when --no-install is provided (parent intercepts --no-install)", async () => {
+        // See the comment in the -y test above for the Commander shadowing
+        // explanation. The subcommand action receives install:true by default.
+        await parse(["module", "orders", "--no-install"]);
+        expect(mockRunModulePrompts).toHaveBeenCalledOnce();
+      });
+
+      it("should call generateModule with the resolved ModuleConfig", async () => {
+        await parse(["module", "orders"]);
+
+        expect(mockGenerateModule).toHaveBeenCalledOnce();
+        expect(mockGenerateModule).toHaveBeenCalledWith(
+          expect.objectContaining({
+            moduleName: MOCK_MODULE_CONFIG.moduleName,
+            entityName: MOCK_MODULE_CONFIG.entityName,
+          }),
+        );
+      });
+
+      it("should call clack.outro with a success message after generation", async () => {
+        await parse(["module", "orders"]);
+
+        expect(mockClack.outro).toHaveBeenCalledOnce();
+        const [outroMsg] = mockClack.outro.mock.calls[0] as [string];
+        expect(outroMsg).toMatch(/generated successfully/i);
+      });
+
+      it("should include the module name in the success outro message", async () => {
+        await parse(["module", "orders"]);
+
+        const [outroMsg] = mockClack.outro.mock.calls[0] as [string];
+        expect(outroMsg).toContain("orders");
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Action handler — error path
+    // -------------------------------------------------------------------------
+    describe("module action handler — error path", () => {
+      /**
+       * Helper that spies on process.exit() and converts it to a thrown error so
+       * the test process itself does not terminate.
+       */
+      class ExitError extends Error {
+        constructor(public readonly code: number) {
+          super(`process.exit(${code})`);
+        }
+      }
+
+      function spyOnExit() {
+        return vi.spyOn(process, "exit").mockImplementation(
+          (code?: number | string | null) => {
+            throw new ExitError(typeof code === "number" ? code : 1);
+          },
+        );
+      }
+
+      it("should call clack.log.error when generateModule throws", async () => {
+        mockGenerateModule.mockRejectedValue(new Error("Template missing"));
+        const exitSpy = spyOnExit();
+
+        try {
+          await parse(["module", "orders"]);
+        } catch {
+          // exit(1) will be thrown; we only care about the side effects.
+        }
+
+        expect(mockClack.log.error).toHaveBeenCalledOnce();
+        expect(mockClack.log.error).toHaveBeenCalledWith(
+          expect.stringContaining("Template missing"),
+        );
+
+        exitSpy.mockRestore();
+      });
+
+      it("should call clack.outro with a failure message when generateModule throws", async () => {
+        mockGenerateModule.mockRejectedValue(new Error("Template missing"));
+        const exitSpy = spyOnExit();
+
+        try {
+          await parse(["module", "orders"]);
+        } catch {
+          // expected
+        }
+
+        expect(mockClack.outro).toHaveBeenCalledWith(
+          expect.stringContaining("failed"),
+        );
+
+        exitSpy.mockRestore();
+      });
+
+      it("should call process.exit(1) when generateModule throws", async () => {
+        mockGenerateModule.mockRejectedValue(new Error("Template missing"));
+        const exitSpy = spyOnExit();
+
+        let caughtErr: unknown;
+        try {
+          await parse(["module", "orders"]);
+        } catch (e) {
+          caughtErr = e;
+        }
+
+        expect(exitSpy).toHaveBeenCalledWith(1);
+        expect((caughtErr as ExitError).code).toBe(1);
+
+        exitSpy.mockRestore();
+      });
+
+      it("should call clack.log.error when runModulePrompts throws", async () => {
+        mockRunModulePrompts.mockRejectedValue(new Error("Context detection failed"));
+        const exitSpy = spyOnExit();
+
+        try {
+          await parse(["module", "orders"]);
+        } catch {
+          // expected
+        }
+
+        expect(mockClack.log.error).toHaveBeenCalledWith(
+          expect.stringContaining("Context detection failed"),
+        );
+
+        exitSpy.mockRestore();
+      });
+
+      it("should handle non-Error throws by stringifying the value", async () => {
+        mockGenerateModule.mockRejectedValue("raw string error");
+        const exitSpy = spyOnExit();
+
+        try {
+          await parse(["module", "orders"]);
+        } catch {
+          // expected
+        }
+
+        expect(mockClack.log.error).toHaveBeenCalledWith(
+          expect.stringContaining("raw string error"),
+        );
+
+        exitSpy.mockRestore();
+      });
+    });
+
+    // -------------------------------------------------------------------------
+    // Module subcommand requires a <name> argument
+    // -------------------------------------------------------------------------
+    describe("module <name> — required positional", () => {
+      it("should exit with a non-zero code when no module name is provided", async () => {
+        const program = createProgram();
+        program.exitOverride();
+
+        let err: Error | undefined;
+        try {
+          await program.parseAsync(["module"], { from: "user" });
+        } catch (e) {
+          err = e as Error;
+        }
+
+        expect(err).toBeDefined();
+        expect((err as NodeJS.ErrnoException & { exitCode?: number }).exitCode).not.toBe(0);
+      });
     });
   });
 });

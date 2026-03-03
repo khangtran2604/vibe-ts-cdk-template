@@ -1,0 +1,25 @@
+/**
+ * In-memory {{entityNameLower}} store.
+ *
+ * This module exports a single `Map` instance that persists across handler
+ * calls within the same Lambda execution environment (warm invocations) and
+ * across all handler imports during local development via the dev server.
+ *
+ * The `{{entityNameLower}}Repository` in `db/repository.ts` delegates to this Map so
+ * that all CRUD operations share a single in-memory source of truth.  When
+ * the database feature is enabled (full preset), the repository file is
+ * replaced by a DynamoDB-backed implementation and this store is unused.
+ */
+
+import type { {{EntityName}} } from "./types/index.js";
+
+/**
+ * Module-level store — one Map per process.
+ *
+ * During local development (dev-server) the same process handles all routes,
+ * so data written by POST /{{moduleName}} is immediately visible to GET /{{moduleName}}.
+ *
+ * On Lambda each handler file is a separate bundle entry point; they share
+ * the container's module cache when the execution environment is warm.
+ */
+export const {{flatLower}} = new Map<string, {{EntityName}}>();

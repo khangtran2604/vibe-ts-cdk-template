@@ -1,0 +1,54 @@
+/**
+ * In-memory {{entityNameLower}} repository.
+ *
+ * Provides the same async interface as the DynamoDB implementation so
+ * handlers can use a single code path regardless of whether the database
+ * feature is enabled.
+ *
+ * When the database feature is enabled (full preset), this file is
+ * overwritten by the DynamoDB-backed implementation from the database
+ * template overlay.
+ */
+
+import type { {{EntityName}} } from "../types/index.js";
+import { {{flatLower}} } from "../store.js";
+
+export const {{entityNameLower}}Repository = {
+  async findById(id: string): Promise<{{EntityName}} | null> {
+    return {{flatLower}}.get(id) ?? null;
+  },
+
+  async create(item: {{EntityName}}): Promise<void> {
+    {{flatLower}}.set(item.id, item);
+  },
+
+  async update(id: string, item: {{EntityName}}): Promise<void> {
+    {{flatLower}}.set(id, item);
+  },
+
+  async delete(id: string): Promise<void> {
+    {{flatLower}}.delete(id);
+  },
+
+  async exists(id: string): Promise<boolean> {
+    return {{flatLower}}.has(id);
+  },
+
+  async list(opts: {
+    limit: number;
+    cursor: string | null;
+  }): Promise<{ items: {{EntityName}}[]; total: number }> {
+    const allItems = Array.from({{flatLower}}.values());
+    const total = allItems.length;
+
+    let startIndex = 0;
+    if (opts.cursor) {
+      const cursorIndex = allItems.findIndex((u) => u.id === opts.cursor);
+      // If cursor not found, start from the beginning (graceful degradation).
+      startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+    }
+
+    const items = allItems.slice(startIndex, startIndex + opts.limit);
+    return { items, total };
+  },
+};
