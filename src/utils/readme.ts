@@ -162,6 +162,17 @@ The dev-gateway proxies requests to individual services during local development
 | \`/api/users/*\` | http://localhost:3002 |`;
 }
 
+function apiDocumentationSection(): string {
+  return `## API Documentation
+
+Run \`pnpm build && pnpm dev\` to start all local development servers, then open:
+
+- **Swagger UI**: <http://localhost:3000/docs>
+- **OpenAPI JSON spec**: <http://localhost:3000/docs/openapi.json>
+
+The dev-gateway aggregates the OpenAPI specs from all running services into a single merged spec. Run \`pnpm build\` first to generate the per-service \`openapi.json\` files before starting the dev server.`;
+}
+
 function sharedPackages(config: ProjectConfig): string {
   const { features } = config;
   const rows = [
@@ -327,6 +338,7 @@ export function generateReadme(config: ProjectConfig): string {
     projectStructure(config),
     availableScripts(config),
     servicesSection(),
+    apiDocumentationSection(),
     sharedPackages(config),
   ];
 

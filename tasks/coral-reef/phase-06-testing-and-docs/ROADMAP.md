@@ -9,14 +9,14 @@ Phases 1-5 complete -- all new files and modifications must be in place before t
 ## Tasks
 | # | Task | Complexity | Dependencies | Status |
 |---|------|-----------|--------------|--------|
-| 6.1 | Update README generator | Low | 5.2 | ⬜ Not Started |
-| 6.2 | Update existing scaffolder and module tests | Medium | 5.1 | ⬜ Not Started |
-| 6.3 | Add schema template variable tests | Medium | 2.2, 4.2 | ⬜ Not Started |
+| 6.1 | Update README generator | Low | 5.2 | ✅ Complete |
+| 6.2 | Update existing scaffolder and module tests | Medium | 5.1 | ✅ Complete |
+| 6.3 | Add schema template variable tests | Medium | 2.2, 4.2 | ✅ Complete |
 
 ## Phase Completion Criteria
-- [ ] README generator includes "API Documentation" section
-- [ ] Existing tests assert new files (schemas/, openapi.ts, generate-spec.ts) exist
-- [ ] New tests verify template variable substitution produces valid schema content
-- [ ] All tests pass: `pnpm test`
+- [x] README generator includes "API Documentation" section
+- [x] Existing tests assert new files (schemas/, openapi.ts, generate-spec.ts) exist
+- [x] New tests verify template variable substitution produces valid schema content
+- [x] All tests pass: `pnpm test`
 
-## Progress: 0/3 tasks complete
+## Progress: 3/3 tasks complete

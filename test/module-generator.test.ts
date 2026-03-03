@@ -226,6 +226,93 @@ describe("generateModule — service files", () => {
     expect(createHandler).toContain("OrderItem");
     expect(createHandler).not.toContain("{{EntityName}}");
   });
+
+  it("should create src/schemas/index.ts in the generated module", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const schemasPath = join(
+      tempDir,
+      "services",
+      "order-items",
+      "src",
+      "schemas",
+      "index.ts"
+    );
+    const content = await readFile(schemasPath, "utf8");
+    expect(content).toBeTruthy();
+  });
+
+  it("should substitute {{EntityName}} in src/schemas/index.ts", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const content = await readFile(
+      join(tempDir, "services", "order-items", "src", "schemas", "index.ts"),
+      "utf8"
+    );
+    expect(content).toContain("OrderItem");
+    expect(content).not.toContain("{{EntityName}}");
+  });
+
+  it("should create src/openapi.ts in the generated module", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const openapiPath = join(
+      tempDir,
+      "services",
+      "order-items",
+      "src",
+      "openapi.ts"
+    );
+    const content = await readFile(openapiPath, "utf8");
+    expect(content).toBeTruthy();
+  });
+
+  it("should substitute {{moduleName}} in src/openapi.ts", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const content = await readFile(
+      join(tempDir, "services", "order-items", "src", "openapi.ts"),
+      "utf8"
+    );
+    expect(content).toContain("order-items");
+    expect(content).not.toContain("{{moduleName}}");
+  });
+
+  it("should substitute {{projectName}} in src/openapi.ts", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const content = await readFile(
+      join(tempDir, "services", "order-items", "src", "openapi.ts"),
+      "utf8"
+    );
+    expect(content).toContain("test-app");
+    expect(content).not.toContain("{{projectName}}");
+  });
+
+  it("should create src/generate-spec.ts in the generated module", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const genSpecPath = join(
+      tempDir,
+      "services",
+      "order-items",
+      "src",
+      "generate-spec.ts"
+    );
+    const content = await readFile(genSpecPath, "utf8");
+    expect(content).toBeTruthy();
+  });
+
+  it("should substitute {{EntityName}} in src/generate-spec.ts", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const content = await readFile(
+      join(tempDir, "services", "order-items", "src", "generate-spec.ts"),
+      "utf8"
+    );
+    expect(content).toContain("OrderItem");
+    expect(content).not.toContain("{{EntityName}}");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -296,7 +383,7 @@ describe("generateModule — infra/src/index.ts injection", () => {
       "utf8"
     );
     const lines = infraContent.split("\n");
-    const markerIdx = lines.findIndex((l) => l.includes("// @module-inject:import"));
+    const markerIdx = lines.findIndex((l: string) => l.includes("// @module-inject:import"));
 
     // The marker must still be present.
     expect(markerIdx).toBeGreaterThan(-1);
@@ -337,7 +424,7 @@ describe("generateModule — infra/src/index.ts injection", () => {
       "utf8"
     );
     const lines = infraContent.split("\n");
-    const markerIdx = lines.findIndex((l) => l.includes("// @module-inject:instance"));
+    const markerIdx = lines.findIndex((l: string) => l.includes("// @module-inject:instance"));
 
     expect(markerIdx).toBeGreaterThan(-1);
 
@@ -383,7 +470,7 @@ describe("generateModule — dev-gateway/src/gateway.ts injection", () => {
       "utf8"
     );
     const lines = gatewayContent.split("\n");
-    const markerIdx = lines.findIndex((l) => l.includes("// @module-inject:route"));
+    const markerIdx = lines.findIndex((l: string) => l.includes("// @module-inject:route"));
 
     expect(markerIdx).toBeGreaterThan(-1);
 
@@ -420,7 +507,7 @@ describe("generateModule — dev-gateway/src/gateway.ts injection", () => {
       "utf8"
     );
     const lines = gatewayContent.split("\n");
-    const markerIdx = lines.findIndex((l) => l.includes("// @module-inject:route"));
+    const markerIdx = lines.findIndex((l: string) => l.includes("// @module-inject:route"));
     // The marker in GATEWAY_CONTENT has 2-space indent; the inserted route should too.
     const insertedLine = lines[markerIdx - 1]!;
     expect(insertedLine).toMatch(/^\s+/);
@@ -512,10 +599,12 @@ describe("generateModule — duplicate guard", () => {
   it("should include the path in the error message", async () => {
     await mkdir(join(tempDir, "services", "order-items"), { recursive: true });
 
-    const error = await generateModule(makeConfig(tempDir)).catch((e) => e as Error);
-    expect(error.message).toContain("order-items");
-    // Should mention the service directory path.
-    expect(error.message).toMatch(/services/);
+    await expect(generateModule(makeConfig(tempDir))).rejects.toThrow(
+      /order-items/
+    );
+    await expect(generateModule(makeConfig(tempDir))).rejects.toThrow(
+      /services/
+    );
   });
 
   it("should not modify any existing files when the guard fires", async () => {
@@ -1289,5 +1378,417 @@ describe("generateModule — app.ts localAuth (mixed protection: create and dele
     );
     expect(appContent).not.toMatch(/\{\{localAuth\w*\}\}/);
     expect(appContent).not.toMatch(/\{\{\w+AuthMiddleware\}\}/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Template variable substitution — schemas/index.ts
+// ---------------------------------------------------------------------------
+
+describe("generateModule — schemas/index.ts variable substitution", () => {
+  it("should generate schemas/index.ts for the orders module", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const schemasPath = join(tempDir, "services", "orders", "src", "schemas", "index.ts");
+    const content = await readFile(schemasPath, "utf8");
+    expect(content).toBeTruthy();
+  });
+
+  it("should contain OrderSchema (not {{EntityName}}Schema) in schemas/index.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "schemas", "index.ts"),
+      "utf8"
+    );
+    expect(content).toContain("OrderSchema");
+    expect(content).not.toContain("{{EntityName}}Schema");
+  });
+
+  it("should contain CreateOrderBodySchema in schemas/index.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "schemas", "index.ts"),
+      "utf8"
+    );
+    expect(content).toContain("CreateOrderBodySchema");
+    expect(content).not.toContain("Create{{EntityName}}BodySchema");
+  });
+
+  it("should contain UpdateOrderBodySchema in schemas/index.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "schemas", "index.ts"),
+      "utf8"
+    );
+    expect(content).toContain("UpdateOrderBodySchema");
+    expect(content).not.toContain("Update{{EntityName}}BodySchema");
+  });
+
+  it("should substitute {{entityNameLower}} in schemas/index.ts JSDoc comments", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "schemas", "index.ts"),
+      "utf8"
+    );
+    // The JSDoc comments use {{entityNameLower}} — should become "order".
+    expect(content).toContain("order");
+    expect(content).not.toContain("{{entityNameLower}}");
+  });
+
+  it("should substitute {{moduleName}} in schemas/index.ts file header comment", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "schemas", "index.ts"),
+      "utf8"
+    );
+    expect(content).toContain("orders");
+    expect(content).not.toContain("{{moduleName}}");
+  });
+
+  it("should produce valid TypeScript type aliases in schemas/index.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "schemas", "index.ts"),
+      "utf8"
+    );
+    // Inferred type aliases must reference concrete schema names.
+    expect(content).toContain("export type Order = z.infer<typeof OrderSchema>");
+    expect(content).toContain("export type CreateOrderBody = z.infer<typeof CreateOrderBodySchema>");
+    expect(content).toContain("export type UpdateOrderBody = z.infer<typeof UpdateOrderBodySchema>");
+  });
+
+  it("should leave no unsubstituted {{...}} template variables in schemas/index.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "schemas", "index.ts"),
+      "utf8"
+    );
+    expect(content).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+
+  it("should work correctly for a multi-word kebab-case module name (order-items)", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const content = await readFile(
+      join(tempDir, "services", "order-items", "src", "schemas", "index.ts"),
+      "utf8"
+    );
+    // EntityName is "OrderItem" for the "order-items" module.
+    expect(content).toContain("OrderItemSchema");
+    expect(content).toContain("CreateOrderItemBodySchema");
+    expect(content).toContain("UpdateOrderItemBodySchema");
+    // entityNameLower is "orderItem".
+    expect(content).toContain("orderItem");
+    expect(content).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Template variable substitution — openapi.ts
+// ---------------------------------------------------------------------------
+
+describe("generateModule — openapi.ts variable substitution", () => {
+  it("should generate openapi.ts for the orders module", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const openapiPath = join(tempDir, "services", "orders", "src", "openapi.ts");
+    const content = await readFile(openapiPath, "utf8");
+    expect(content).toBeTruthy();
+  });
+
+  it("should contain /orders path registrations in openapi.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "openapi.ts"),
+      "utf8"
+    );
+    // Both the collection path and the item path must be present.
+    expect(content).toContain('path: "/orders"');
+    expect(content).toContain('path: "/orders/{id}"');
+  });
+
+  it("should import OrderSchema, CreateOrderBodySchema, UpdateOrderBodySchema in openapi.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "openapi.ts"),
+      "utf8"
+    );
+    expect(content).toContain("OrderSchema");
+    expect(content).toContain("CreateOrderBodySchema");
+    expect(content).toContain("UpdateOrderBodySchema");
+  });
+
+  it("should not contain unresolved {{EntityName}} import placeholders in openapi.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "openapi.ts"),
+      "utf8"
+    );
+    expect(content).not.toContain("{{EntityName}}Schema");
+    expect(content).not.toContain("Create{{EntityName}}BodySchema");
+    expect(content).not.toContain("Update{{EntityName}}BodySchema");
+  });
+
+  it("should register schemas using resolved entity names in openapi.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "openapi.ts"),
+      "utf8"
+    );
+    expect(content).toContain('registry.register("Order",');
+    expect(content).toContain('registry.register("CreateOrderBody",');
+    expect(content).toContain('registry.register("UpdateOrderBody",');
+  });
+
+  it("should substitute {{projectName}} in the shared-types import path in openapi.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "openapi.ts"),
+      "utf8"
+    );
+    expect(content).toContain("@test-app/shared-types");
+    expect(content).not.toContain("{{projectName}}");
+  });
+
+  it("should leave no unsubstituted {{...}} template variables in openapi.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "openapi.ts"),
+      "utf8"
+    );
+    expect(content).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+
+  it("should work correctly for a multi-word kebab-case module name in openapi.ts", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const content = await readFile(
+      join(tempDir, "services", "order-items", "src", "openapi.ts"),
+      "utf8"
+    );
+    expect(content).toContain('path: "/order-items"');
+    expect(content).toContain('path: "/order-items/{id}"');
+    expect(content).toContain("OrderItemSchema");
+    expect(content).toContain("CreateOrderItemBodySchema");
+    expect(content).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Template variable substitution — generate-spec.ts
+// ---------------------------------------------------------------------------
+
+describe("generateModule — generate-spec.ts variable substitution", () => {
+  it("should generate generate-spec.ts for the orders module", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const specPath = join(tempDir, "services", "orders", "src", "generate-spec.ts");
+    const content = await readFile(specPath, "utf8");
+    expect(content).toBeTruthy();
+  });
+
+  it("should substitute {{EntityName}} in the API title in generate-spec.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "generate-spec.ts"),
+      "utf8"
+    );
+    expect(content).toContain("Order Service API");
+    expect(content).not.toContain("{{EntityName}}");
+  });
+
+  it("should leave no unsubstituted {{...}} template variables in generate-spec.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "generate-spec.ts"),
+      "utf8"
+    );
+    expect(content).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+
+  it("should work correctly for a multi-word kebab-case module name in generate-spec.ts", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const content = await readFile(
+      join(tempDir, "services", "order-items", "src", "generate-spec.ts"),
+      "utf8"
+    );
+    expect(content).toContain("OrderItem Service API");
+    expect(content).not.toMatch(/\{\{[^}]+\}\}/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// No residual template variables — all generated service files
+// ---------------------------------------------------------------------------
+
+describe("generateModule — no residual {{...}} placeholders in any generated file", () => {
+  /**
+   * Returns the content of every file under `services/<moduleName>/src/` that
+   * was copied from a `.hbs` template, keyed by their relative path from the
+   * service root.  These are the files most likely to contain unsubstituted
+   * placeholders if the variable map is incomplete.
+   */
+  async function readAllServiceFiles(
+    serviceDir: string
+  ): Promise<Array<{ path: string; content: string }>> {
+    const filePaths = [
+      join(serviceDir, "src", "schemas", "index.ts"),
+      join(serviceDir, "src", "openapi.ts"),
+      join(serviceDir, "src", "generate-spec.ts"),
+      join(serviceDir, "src", "app.ts"),
+      join(serviceDir, "src", "dev-server.ts"),
+      join(serviceDir, "src", "store.ts"),
+      join(serviceDir, "src", "types", "index.ts"),
+      join(serviceDir, "src", "db", "repository.ts"),
+      join(serviceDir, "src", "handlers", "create.ts"),
+      join(serviceDir, "src", "handlers", "get.ts"),
+      join(serviceDir, "src", "handlers", "list.ts"),
+      join(serviceDir, "src", "handlers", "update.ts"),
+      join(serviceDir, "src", "handlers", "delete.ts"),
+    ];
+
+    const results: Array<{ path: string; content: string }> = [];
+    for (const filePath of filePaths) {
+      const content = await readFile(filePath, "utf8");
+      results.push({ path: filePath, content });
+    }
+    return results;
+  }
+
+  it("should leave no {{...}} placeholders in any generated service file for a simple module name", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const serviceDir = join(tempDir, "services", "orders");
+    const files = await readAllServiceFiles(serviceDir);
+
+    for (const { path, content } of files) {
+      const match = content.match(/\{\{[^}]+\}\}/);
+      expect(
+        match,
+        `Unsubstituted placeholder "${match?.[0]}" found in ${path}`
+      ).toBeNull();
+    }
+  });
+
+  it("should leave no {{...}} placeholders in any generated service file for a multi-word module name", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const serviceDir = join(tempDir, "services", "order-items");
+    const files = await readAllServiceFiles(serviceDir);
+
+    for (const { path, content } of files) {
+      const match = content.match(/\{\{[^}]+\}\}/);
+      expect(
+        match,
+        `Unsubstituted placeholder "${match?.[0]}" found in ${path}`
+      ).toBeNull();
+    }
+  });
+
+  it("should leave no {{...}} placeholders in any generated service file when all endpoints are protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        moduleName: "orders",
+        entityName: "Order",
+        port: 3003,
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const serviceDir = join(tempDir, "services", "orders");
+    const files = await readAllServiceFiles(serviceDir);
+
+    for (const { path, content } of files) {
+      const match = content.match(/\{\{[^}]+\}\}/);
+      expect(
+        match,
+        `Unsubstituted placeholder "${match?.[0]}" found in ${path}`
+      ).toBeNull();
+    }
+  });
+
+  it("should contain the module name in generated schemas/index.ts after substitution", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "schemas", "index.ts"),
+      "utf8"
+    );
+    // The file header comment references the module name.
+    expect(content).toContain("orders");
+  });
+
+  it("should contain /orders path in generated openapi.ts after substitution", async () => {
+    await generateModule(
+      makeConfig(tempDir, { moduleName: "orders", entityName: "Order", port: 3003 })
+    );
+
+    const content = await readFile(
+      join(tempDir, "services", "orders", "src", "openapi.ts"),
+      "utf8"
+    );
+    expect(content).toContain("/orders");
   });
 });

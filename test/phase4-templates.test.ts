@@ -204,6 +204,30 @@ describe("Phase 4 template structure — services/users/", () => {
       await exists(join(u, "test", "integration", "api.test.ts"))
     ).toBe(true);
   });
+
+  it("templates/services/users/src/schemas/index.ts should exist", async () => {
+    expect(await exists(join(u, "src", "schemas", "index.ts"))).toBe(true);
+  });
+
+  it("templates/services/users/src/openapi.ts should exist", async () => {
+    expect(await exists(join(u, "src", "openapi.ts"))).toBe(true);
+  });
+
+  it("templates/services/users/src/generate-spec.ts should exist", async () => {
+    expect(await exists(join(u, "src", "generate-spec.ts"))).toBe(true);
+  });
+});
+
+describe("Phase 4 template structure — services/health/ OpenAPI additions", () => {
+  const h = join(TEMPLATE_ROOT, "services", "health");
+
+  it("templates/services/health/src/openapi.ts should exist", async () => {
+    expect(await exists(join(h, "src", "openapi.ts"))).toBe(true);
+  });
+
+  it("templates/services/health/src/generate-spec.ts should exist", async () => {
+    expect(await exists(join(h, "src", "generate-spec.ts"))).toBe(true);
+  });
 });
 
 describe("Phase 4 template structure — dev-gateway/", () => {
@@ -219,6 +243,16 @@ describe("Phase 4 template structure — dev-gateway/", () => {
 
   it("templates/dev-gateway/src/gateway.ts should exist", async () => {
     expect(await exists(join(gw, "src", "gateway.ts"))).toBe(true);
+  });
+
+  it("templates/dev-gateway/src/gateway.ts should contain the /docs documentation handler", async () => {
+    const content = await readFile(join(gw, "src", "gateway.ts"), "utf8");
+    expect(content).toContain("/docs");
+  });
+
+  it("templates/dev-gateway/src/gateway.ts should contain the /docs/openapi.json spec endpoint", async () => {
+    const content = await readFile(join(gw, "src", "gateway.ts"), "utf8");
+    expect(content).toContain("/docs/openapi.json");
   });
 });
 
@@ -276,6 +310,10 @@ describe("Phase 4 template structure — packages/", () => {
 
   it("templates/packages/shared-types/src/api.ts should exist", async () => {
     expect(await exists(join(p, "shared-types", "src", "api.ts"))).toBe(true);
+  });
+
+  it("templates/packages/shared-types/src/schemas.ts should exist", async () => {
+    expect(await exists(join(p, "shared-types", "src", "schemas.ts"))).toBe(true);
   });
 
   it("templates/packages/utils/package.json.hbs should exist", async () => {
@@ -541,6 +579,28 @@ describe("Phase 4 static template files have no un-substituted {{}} placeholders
     [
       "packages/shared-types/src/api.ts",
       join(TEMPLATE_ROOT, "packages", "shared-types", "src", "api.ts"),
+    ],
+    [
+      "packages/shared-types/src/schemas.ts",
+      join(TEMPLATE_ROOT, "packages", "shared-types", "src", "schemas.ts"),
+    ],
+    // services/users OpenAPI additions — no {{}} placeholders
+    [
+      "services/users/src/schemas/index.ts",
+      join(TEMPLATE_ROOT, "services", "users", "src", "schemas", "index.ts"),
+    ],
+    [
+      "services/users/src/generate-spec.ts",
+      join(TEMPLATE_ROOT, "services", "users", "src", "generate-spec.ts"),
+    ],
+    // services/health OpenAPI additions — no {{}} placeholders
+    [
+      "services/health/src/openapi.ts",
+      join(TEMPLATE_ROOT, "services", "health", "src", "openapi.ts"),
+    ],
+    [
+      "services/health/src/generate-spec.ts",
+      join(TEMPLATE_ROOT, "services", "health", "src", "generate-spec.ts"),
     ],
     [
       "packages/utils/src/index.ts",
