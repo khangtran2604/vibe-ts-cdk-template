@@ -1,0 +1,196 @@
+/**
+ * User repository with DynamoDB backend and in-memory fallback.
+ *
+ * When USERS_TABLE_NAME is set (Lambda deployment), all operations go to
+ * DynamoDB via the @{{projectName}}/database-client package.  When the env
+ * var is absent (local dev, unit tests), an in-memory Map is used instead.
+ *
+ * This dual-mode design means the same handler code works in both
+ * environments without mocking or test-only wiring.
+ */
+
+import type { User } from "../types/index.js";
+import { users } from "../store.js";
+
+// ---------------------------------------------------------------------------
+// Repository interface (shared between both implementations)
+// ---------------------------------------------------------------------------
+
+interface UserRepository {
+  findById(id: string): Promise<User | null>;
+  create(user: User): Promise<void>;
+  update(id: string, user: User): Promise<void>;
+  delete(id: string): Promise<void>;
+  exists(id: string): Promise<boolean>;
+  list(opts: {
+    limit: number;
+    cursor: string | null;
+  }): Promise<{ items: User[]; total: number }>;
+}
+
+// ---------------------------------------------------------------------------
+// In-memory implementation (local dev + unit tests)
+//
+// Delegates to the `users` Map exported by store.ts so that existing tests
+// which call `users.clear()` / `users.has(...)` continue to work correctly.
+// ---------------------------------------------------------------------------
+
+const inMemoryRepository: UserRepository = {
+  async findById(id) {
+    return users.get(id) ?? null;
+  },
+  async create(user) {
+    users.set(user.id, user);
+  },
+  async update(id, user) {
+    users.set(id, user);
+  },
+  async delete(id) {
+    users.delete(id);
+  },
+  async exists(id) {
+    return users.has(id);
+  },
+  async list(opts) {
+    const allUsers = Array.from(users.values());
+    const total = allUsers.length;
+    let startIndex = 0;
+    if (opts.cursor) {
+      const cursorIndex = allUsers.findIndex((u) => u.id === opts.cursor);
+      startIndex = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+    }
+    const items = allUsers.slice(startIndex, startIndex + opts.limit);
+    return { items, total };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// DynamoDB implementation (deployed Lambda)
+// ---------------------------------------------------------------------------
+
+function createDynamoRepository(): UserRepository {
+  // Lazy-load SDK modules so they are only required when DynamoDB is in use.
+  // This keeps local dev and test startup fast.
+  const {
+    GetCommand,
+    PutCommand,
+    DeleteCommand,
+    QueryCommand,
+  } = require("@aws-sdk/lib-dynamodb");
+  const {
+    getDocumentClient,
+    getUsersTableName,
+  } = require("@{{projectName}}/database-client");
+
+  function mapItemToUser(item: Record<string, unknown>): User {
+    return {
+      id: item["id"] as string,
+      name: item["name"] as string,
+      email: item["email"] as string,
+      createdAt: item["createdAt"] as string,
+      updatedAt: item["updatedAt"] as string,
+    };
+  }
+
+  return {
+    async findById(id) {
+      const client = getDocumentClient();
+      const result = await client.send(
+        new GetCommand({
+          TableName: getUsersTableName(),
+          Key: { pk: `USER#${id}`, sk: `USER#${id}` },
+        })
+      );
+      return result.Item ? mapItemToUser(result.Item) : null;
+    },
+
+    async create(user) {
+      const client = getDocumentClient();
+      await client.send(
+        new PutCommand({
+          TableName: getUsersTableName(),
+          Item: {
+            pk: `USER#${user.id}`,
+            sk: `USER#${user.id}`,
+            gsi1pk: "USERS",
+            gsi1sk: user.createdAt,
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+          },
+        })
+      );
+    },
+
+    async update(id, user) {
+      const client = getDocumentClient();
+      await client.send(
+        new PutCommand({
+          TableName: getUsersTableName(),
+          Item: {
+            pk: `USER#${id}`,
+            sk: `USER#${id}`,
+            gsi1pk: "USERS",
+            gsi1sk: user.createdAt,
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+          },
+        })
+      );
+    },
+
+    async delete(id) {
+      const client = getDocumentClient();
+      await client.send(
+        new DeleteCommand({
+          TableName: getUsersTableName(),
+          Key: { pk: `USER#${id}`, sk: `USER#${id}` },
+        })
+      );
+    },
+
+    async exists(id) {
+      const client = getDocumentClient();
+      const result = await client.send(
+        new GetCommand({
+          TableName: getUsersTableName(),
+          Key: { pk: `USER#${id}`, sk: `USER#${id}` },
+          ProjectionExpression: "pk",
+        })
+      );
+      return result.Item !== undefined;
+    },
+
+    async list(opts) {
+      const client = getDocumentClient();
+      const result = await client.send(
+        new QueryCommand({
+          TableName: getUsersTableName(),
+          IndexName: "EmailIndex",
+          KeyConditionExpression: "gsi1pk = :pk",
+          ExpressionAttributeValues: { ":pk": "USERS" },
+          Limit: opts.limit,
+          ScanIndexForward: false,
+        })
+      );
+      const items = (result.Items ?? []).map(mapItemToUser);
+      return {
+        items,
+        total: result.Count ?? items.length,
+      };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Exported repository — chosen at module load time based on environment
+// ---------------------------------------------------------------------------
+
+export const userRepository: UserRepository = process.env["USERS_TABLE_NAME"]
+  ? createDynamoRepository()
+  : inMemoryRepository;

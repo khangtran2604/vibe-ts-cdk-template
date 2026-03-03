@@ -147,10 +147,10 @@ const isMain = (() => {
 | `src/utils/logger.ts` | clack.log wrapper: `info`, `success`, `warn`, `error` |
 | `src/utils/git.ts` | `initGit(dir)` — async exec git init with timeouts, returns `GitResult` |
 | `src/utils/pnpm.ts` | `installDeps(dir)` — async exec pnpm install with spinner + timeouts, returns `PnpmResult` |
-| `src/utils/fs.ts` | Template transforms: `copyDir`, `renameFile`, `replaceVariables`, `processConditionals` — CONDITIONAL_RE handles both top-level and indented `// @feature:X` lines (group 1=indent, group 2=name, group 3=code) |
+| `src/utils/fs.ts` | Template transforms: `copyDir`, `renameFile`, `replaceVariables`, `processConditionals` — CONDITIONAL_RE handles both top-level and indented `// @feature:X` lines (group 1=indent, group 2=name, group 3=code). `renameFile` is applied to BOTH files AND directories in copyDir (fixed in Phase 6.2 to support `_github/` → `.github/`). |
 | `src/template-helpers.ts` | `getTemplateDirs`, `getVariableMap`, `getWorkspaceEntries` |
 | `test/index.test.ts` | Commander parsing + action handler tests (44 tests) |
-| `test/utils/fs.test.ts` | Filesystem utils tests (44 tests, includes tmp-dir integration) |
+| `test/utils/fs.test.ts` | Filesystem utils tests (52 tests, includes tmp-dir integration) |
 | `test/template-helpers.test.ts` | template-helpers unit tests (55 tests) |
 | `tsup.config.ts` | Build config (entry: `src/index.ts`, target: node24) |
 
@@ -164,3 +164,45 @@ See `templates.md` for full details. Key rules:
 - Auth lambda authorizer: `aws-jwt-verify` (production dep), types from `aws-lambda`, returns Deny on all failures.
 - Auth stack CDK entry path: `../../../../auth/src/authorizer.ts` relative to `__dirname` inside infra/src/stacks/modules/.
 - `getWorkspaceEntries`: `frontend`, `auth`, `e2e` get workspace entries when enabled. Other features do not.
+
+### Database template conventions (Phase 6.1)
+- Located at `templates/database/packages/database-client/` — merges into project root
+  as `packages/database-client/` (database NOT in SUBDIR_TEMPLATE_DIRS).
+- `packages/database-client` needs NO extra workspace entry — already covered by `"packages/*"` glob.
+- CDK database stack: `templates/infra/src/stacks/modules/database-stack.ts.hbs`.
+- DynamoDB table: `PAY_PER_REQUEST`, pk (HASH) + sk (RANGE) strings, GSI EmailIndex on gsi1pk/gsi1sk.
+- `pointInTimeRecovery: !this.config.isDev` — enables PITR in staging/prod automatically.
+- RDS resources gated behind `// @feature:rds` — VPC (isolated subnets, no NAT), SecurityGroup,
+  Aurora PostgreSQL v16.4 Serverless v2 cluster (0.5–4 ACU, credentials via Secrets Manager).
+- DatabaseStack exports: `usersTable`, `usersTableName`, `usersTableArn` for service stacks.
+- database-client package: `getDocumentClient()` singleton (lazy-init, module scope for Lambda reuse),
+  `getUsersTableName()` reads USERS_TABLE_NAME env var (throws at startup if missing).
+- `_resetClientForTesting()` exported for test isolation (resets singleton).
+
+### CI/CD template conventions (Phase 6.2)
+- Located at `templates/cicd/_github/workflows/` — merges into project root as `.github/workflows/`.
+- No `.hbs` extension needed (no `{{variable}}` placeholders). GitHub Actions `${{ }}` syntax is distinct.
+- Three workflows: `ci.yml` (PR), `deploy-staging.yml` (push to main), `deploy-production.yml` (workflow_dispatch).
+- AWS credentials via OIDC: `aws-actions/configure-aws-credentials@v4` with `role-to-assume: ${{ secrets.AWS_ROLE_ARN }}`.
+- pnpm caching: `pnpm/action-setup@v4` + `actions/setup-node@v4` with `cache: "pnpm"`.
+- CDK deploy uses `pnpm --filter infra exec -- npx cdk deploy --all -c stage=<env> --require-approval never`.
+- `id-token: write` permission required in deploy workflows for OIDC token generation.
+
+### Extras template conventions (Phase 6.4 — Husky + lint-staged)
+- Located at `templates/extras/` — NOT in SUBDIR_TEMPLATE_DIRS, so contents merge into project root.
+- `templates/extras/_husky/pre-commit` → generated project's `.husky/pre-commit`.
+  Directory rename `_husky` → `.husky` handled by `renameFile()` applied to directories in `copyDir`.
+- No `.hbs` extension needed — no `{{variable}}` placeholders in these files.
+- Husky v9 style: simple shell scripts in `.husky/`, no shebang needed.
+- `copyDir` directory rename fix: previously used `entry.name` raw for subdirs; now uses `renameFile(entry.name)`.
+  This is a correctness fix that affects any template dir with a `_`-prefixed subdirectory name.
+
+### Monitoring / database / repository details
+See `templates.md` for full conventions on each template layer.
+
+Key Phase 6.5 fix: handler/repository pattern. All handlers now use `userRepository` object
+from `../db/user-repository.js`. Base = in-memory Map. Database overlay = DynamoDB via AWS SDK v3
+commands. See `templates.md` "services/ template conventions" for full details.
+
+CRITICAL: `exactOptionalPropertyTypes: true` in shared tsconfig — `{ region: string | undefined }`
+is a type error. Use `new DynamoDBClient(region ? { region } : {})` pattern.

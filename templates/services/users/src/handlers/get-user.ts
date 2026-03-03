@@ -12,13 +12,11 @@
  *   404 — user not found
  */
 
-// @feature:database import { UserRepository } from "../db/user-repository.js";
-
 import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
 } from "aws-lambda";
-import { users } from "../store.js";
+import { userRepository } from "../db/user-repository.js";
 
 const HEADERS = { "Content-Type": "application/json" } as const;
 
@@ -50,8 +48,7 @@ export async function handler(
     };
   }
 
-  // @feature:database const user = await userRepository.findById(id);
-  const user = users.get(id);
+  const user = await userRepository.findById(id);
 
   if (!user) {
     return {

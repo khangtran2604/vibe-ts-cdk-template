@@ -42,4 +42,4 @@ Run the full verification loop for the full preset, both with and without the `-
 Medium -- Comprehensive verification of the most complex preset
 
 ## Status
-- [ ] Not Started
+- [x] Complete

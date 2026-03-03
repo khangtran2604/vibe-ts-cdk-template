@@ -35,12 +35,21 @@
 - Phase 1-3: `CLI_VERSION` duplicated from package.json; `noExternal: []` no-op; `execSync` lacks timeout
 - Phase 4: `!this.stage === "prod"` operator precedence bug; `source-map-support/register` missing dep
 - Phase 5: auth-stack hardcodes memorySize/timeout; SUBDIR_TEMPLATE_DIRS comment stale; e2e title mismatch
+- Phase 6: `--require-approval never` in prod deploy; SNS fallback to example.com; database-client missing vitest.config.ts
 
 ## File Layout
 - `src/scaffolder.ts` -- core scaffolding engine, SUBDIR_TEMPLATE_DIRS set
 - `src/template-helpers.ts` -- getTemplateDirs, getVariableMap, getWorkspaceEntries
 - `src/utils/fs.ts` -- copyDir, renameFile, replaceVariables, processConditionals
 - `templates/infra/src/stacks/base-stack.ts` -- ServiceStack base class
+- `templates/infra/src/index.ts.hbs` -- CDK app entry; `// @feature:X` gates stack imports/instantiations
+
+## Template Merge Behavior
+- SUBDIR_TEMPLATE_DIRS: services, infra, dev-gateway, packages, frontend, auth, e2e
+- Root-merge dirs (NOT in SUBDIR_TEMPLATE_DIRS): base, database, cicd, monitoring, extras
+- Root-merge means `templates/database/packages/...` -> `projectDir/packages/...`
+- database-client and monitoring land under `packages/*` workspace glob automatically
+- `_github/` -> `.github/`, `_husky/` -> `.husky/` via renameFile() on directories
 
 ## Test Patterns
 - `vi.hoisted()` for mock data referenced in `vi.mock()` factories

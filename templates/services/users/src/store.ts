@@ -5,11 +5,11 @@
  * calls within the same Lambda execution environment (warm invocations) and
  * across all handler imports during local development via the dev server.
  *
- * Phase 6 (database preset) replaces this module with DynamoDB or RDS
- * repository implementations while keeping handler signatures unchanged.
+ * The `userRepository` in `db/user-repository.ts` delegates to this Map so
+ * that all CRUD operations share a single in-memory source of truth.  When
+ * the database feature is enabled (full preset), the repository file is
+ * replaced by a DynamoDB-backed implementation and this store is unused.
  */
-
-// @feature:database import { UserRepository } from "./db/user-repository.js";
 
 import type { User } from "./types/index.js";
 
@@ -22,5 +22,4 @@ import type { User } from "./types/index.js";
  * On Lambda each handler file is a separate bundle entry point; they share
  * the container's module cache when the execution environment is warm.
  */
-// @feature:database // In-memory store replaced by database repository when database feature is enabled.
 export const users = new Map<string, User>();

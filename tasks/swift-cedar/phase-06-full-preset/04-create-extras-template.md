@@ -35,4 +35,4 @@ Create the `templates/extras/` directory with Husky pre-commit hooks and lint-st
 Low -- Standard Husky + lint-staged configuration
 
 ## Status
-- [ ] Not Started
+- [x] Complete

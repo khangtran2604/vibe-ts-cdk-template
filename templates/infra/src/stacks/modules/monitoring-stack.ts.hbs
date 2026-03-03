@@ -1,0 +1,456 @@
+import * as cdk from "aws-cdk-lib";
+import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
+import * as cloudwatch_actions from "aws-cdk-lib/aws-cloudwatch-actions";
+import * as logs from "aws-cdk-lib/aws-logs";
+import * as sns from "aws-cdk-lib/aws-sns";
+import * as sns_subscriptions from "aws-cdk-lib/aws-sns-subscriptions";
+import type { Construct } from "constructs";
+import { ServiceStack, type ServiceStackProps } from "../base-stack";
+
+/**
+ * MonitoringStack — CloudWatch dashboards, alarms, log groups, and SNS alerts.
+ *
+ * Resources created:
+ * - CloudWatch Dashboard: unified view of Lambda and API Gateway metrics
+ * - Lambda alarms: error rate, duration threshold per service
+ * - API Gateway alarms: 5xx error rate per service
+ * - SNS topic: receives alarm state-change notifications
+ * - Log groups: per-service Lambda log groups with stage-appropriate retention
+ *
+ * Alarm thresholds are intentionally more relaxed in dev and tighter in prod:
+ * - Dev: Lambda errors ≥ 5 over 5 min; duration > 5s; 5xx ≥ 5 over 5 min
+ * - Prod: Lambda errors ≥ 1 over 1 min; duration > 3s; 5xx ≥ 1 over 1 min
+ *
+ * Stack outputs:
+ * - DashboardUrl   — direct link to the CloudWatch dashboard
+ * - AlarmTopicArn  — SNS topic ARN for wiring additional subscriptions
+ */
+export class MonitoringStack extends ServiceStack {
+  /** ARN of the SNS topic that receives CloudWatch alarm notifications */
+  public readonly alarmTopicArn: string;
+
+  constructor(scope: Construct, id: string, props: ServiceStackProps) {
+    super(scope, id, props);
+
+    // -------------------------------------------------------------------------
+    // Stage-aware thresholds
+    //
+    // More relaxed in dev to avoid alert fatigue during development.
+    // Tighter in staging/prod to catch regressions early.
+    // -------------------------------------------------------------------------
+    const isProd = this.stage === "prod";
+
+    /** Minimum number of Lambda errors before firing an alarm */
+    const lambdaErrorThreshold = isProd ? 1 : 5;
+    /** Evaluation period length in minutes */
+    const lambdaErrorPeriodMinutes = isProd ? 1 : 5;
+    /** Lambda duration alarm threshold in milliseconds (3s prod / 5s dev) */
+    const lambdaDurationThresholdMs = isProd ? 3_000 : 5_000;
+    /** API Gateway 5xx error count threshold before firing */
+    const apig5xxThreshold = isProd ? 1 : 5;
+    /** Evaluation period for API Gateway alarms in minutes */
+    const apig5xxPeriodMinutes = isProd ? 1 : 5;
+
+    // -------------------------------------------------------------------------
+    // SNS Topic — alarm notification sink
+    //
+    // Downstream subscribers (email, PagerDuty, Slack via Lambda) can be
+    // added here or via the AlarmTopicArn stack output.
+    // -------------------------------------------------------------------------
+    const alarmTopic = new sns.Topic(this, "AlarmTopic", {
+      topicName: this.resourceName("{{projectName}}-alarms"),
+      displayName: `{{projectName}} CloudWatch Alarms (${this.stage})`,
+    });
+
+    // Subscribe to alarm notifications via email.
+    // Set the ALERT_EMAIL environment variable or context value before deploying.
+    // You can also add a Lambda subscription for Slack/PagerDuty integration.
+    const alertEmail = this.node.tryGetContext("alertEmail") as
+      | string
+      | undefined;
+    if (alertEmail) {
+      alarmTopic.addSubscription(
+        new sns_subscriptions.EmailSubscription(alertEmail)
+      );
+    }
+
+    this.alarmTopicArn = alarmTopic.topicArn;
+
+    const snsAction = new cloudwatch_actions.SnsAction(alarmTopic);
+
+    // -------------------------------------------------------------------------
+    // Log groups — created here with stage-appropriate retention so they are
+    // managed by CDK rather than auto-created by Lambda with infinite retention.
+    //
+    // NOTE: These names must match the logGroupName used in each service stack.
+    // -------------------------------------------------------------------------
+    const serviceNames = ["health", "users"];
+
+    const logGroups = serviceNames.map(
+      (svc) =>
+        new logs.LogGroup(this, `${svc}LogGroup`, {
+          logGroupName: `/aws/lambda/{{projectName}}-${svc}-${this.stage}`,
+          retention: this.logRetention(),
+          removalPolicy: this.removalPolicy,
+        })
+    );
+
+    // Silence the unused-variable linter warning — log groups are created for
+    // their side-effect (retention + removal policy) and referenced by name.
+    void logGroups;
+
+    // -------------------------------------------------------------------------
+    // Helper: build a CloudWatch Period from minutes
+    // -------------------------------------------------------------------------
+    const period = (minutes: number): cdk.Duration =>
+      cdk.Duration.minutes(minutes);
+
+    // -------------------------------------------------------------------------
+    // Lambda alarms — one set per service
+    // -------------------------------------------------------------------------
+    const lambdaAlarms: cloudwatch.Alarm[] = [];
+
+    for (const svc of serviceNames) {
+      const fnName = `{{projectName}}-${svc}-${this.stage}`;
+
+      // Lambda Errors alarm
+      const errorAlarm = new cloudwatch.Alarm(
+        this,
+        `${svc}LambdaErrorAlarm`,
+        {
+          alarmName: `{{projectName}}-${svc}-lambda-errors-${this.stage}`,
+          alarmDescription: `Lambda error count for ${fnName} exceeds threshold`,
+          metric: new cloudwatch.Metric({
+            namespace: "AWS/Lambda",
+            metricName: "Errors",
+            dimensionsMap: { FunctionName: fnName },
+            statistic: "Sum",
+            period: period(lambdaErrorPeriodMinutes),
+          }),
+          threshold: lambdaErrorThreshold,
+          evaluationPeriods: 1,
+          comparisonOperator:
+            cloudwatch.ComparisonOperator
+              .GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+          // MISSING data means the function was never invoked — treat as not
+          // breaching so quiet periods do not trigger false alarms.
+          treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+        }
+      );
+      errorAlarm.addAlarmAction(snsAction);
+      errorAlarm.addOkAction(snsAction);
+      lambdaAlarms.push(errorAlarm);
+
+      // Lambda Duration alarm
+      const durationAlarm = new cloudwatch.Alarm(
+        this,
+        `${svc}LambdaDurationAlarm`,
+        {
+          alarmName: `{{projectName}}-${svc}-lambda-duration-${this.stage}`,
+          alarmDescription: `Lambda p99 duration for ${fnName} exceeds ${lambdaDurationThresholdMs}ms`,
+          metric: new cloudwatch.Metric({
+            namespace: "AWS/Lambda",
+            metricName: "Duration",
+            dimensionsMap: { FunctionName: fnName },
+            // p99 catches tail latency spikes that average/p50 would mask.
+            statistic: "p99",
+            period: period(5),
+          }),
+          threshold: lambdaDurationThresholdMs,
+          evaluationPeriods: 3,
+          comparisonOperator:
+            cloudwatch.ComparisonOperator
+              .GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+          treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+        }
+      );
+      durationAlarm.addAlarmAction(snsAction);
+      lambdaAlarms.push(durationAlarm);
+    }
+
+    // -------------------------------------------------------------------------
+    // API Gateway alarms — one per service API
+    // -------------------------------------------------------------------------
+    const apiNames = ["{{projectName}}-health-api", "{{projectName}}-users-api"];
+
+    const apigAlarms: cloudwatch.Alarm[] = [];
+
+    for (const apiName of apiNames) {
+      const shortName = apiName.replace(`{{projectName}}-`, "").replace("-api", "");
+      const apiStageName = `${apiName}-${this.stage}`;
+
+      const fivexxAlarm = new cloudwatch.Alarm(
+        this,
+        `${shortName}Apig5xxAlarm`,
+        {
+          alarmName: `{{projectName}}-${shortName}-apig-5xx-${this.stage}`,
+          alarmDescription: `API Gateway 5xx errors for ${apiStageName} exceed threshold`,
+          metric: new cloudwatch.Metric({
+            namespace: "AWS/ApiGateway",
+            metricName: "5XXError",
+            dimensionsMap: { ApiName: apiStageName },
+            statistic: "Sum",
+            period: period(apig5xxPeriodMinutes),
+          }),
+          threshold: apig5xxThreshold,
+          evaluationPeriods: 1,
+          comparisonOperator:
+            cloudwatch.ComparisonOperator
+              .GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+          treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+        }
+      );
+      fivexxAlarm.addAlarmAction(snsAction);
+      fivexxAlarm.addOkAction(snsAction);
+      apigAlarms.push(fivexxAlarm);
+    }
+
+    // -------------------------------------------------------------------------
+    // Composite alarm — fires only when ANY individual alarm is in ALARM state.
+    // Reduces notification noise by grouping per-service alarms under one
+    // top-level alert that ops teams can subscribe to.
+    // -------------------------------------------------------------------------
+    const compositeAlarm = new cloudwatch.CompositeAlarm(
+      this,
+      "CompositeAlarm",
+      {
+        compositeAlarmName: `{{projectName}}-composite-alarm-${this.stage}`,
+        alarmDescription:
+          "Composite alarm: fires when any service Lambda or API Gateway alarm triggers",
+        alarmRule: cloudwatch.AlarmRule.anyOf(
+          ...[...lambdaAlarms, ...apigAlarms]
+        ),
+      }
+    );
+    compositeAlarm.addAlarmAction(snsAction);
+
+    // -------------------------------------------------------------------------
+    // CloudWatch Dashboard
+    // -------------------------------------------------------------------------
+    const dashboard = new cloudwatch.Dashboard(this, "Dashboard", {
+      dashboardName: `{{projectName}}-${this.stage}`,
+      // Default time range: last 3 hours for dev, last 24 hours for prod.
+      // Operators can always change this in the console.
+      defaultInterval: this.config.isDev
+        ? cdk.Duration.hours(3)
+        : cdk.Duration.hours(24),
+    });
+
+    // -------------------------------------------------------------------------
+    // Dashboard widgets
+    // -------------------------------------------------------------------------
+
+    // Row 1: Lambda Invocations per service
+    const invocationWidgets = serviceNames.map(
+      (svc) =>
+        new cloudwatch.GraphWidget({
+          title: `Lambda Invocations — ${svc}`,
+          width: 12,
+          height: 6,
+          left: [
+            new cloudwatch.Metric({
+              namespace: "AWS/Lambda",
+              metricName: "Invocations",
+              dimensionsMap: {
+                FunctionName: `{{projectName}}-${svc}-${this.stage}`,
+              },
+              statistic: "Sum",
+              period: period(1),
+              label: "Invocations",
+            }),
+          ],
+          right: [
+            new cloudwatch.Metric({
+              namespace: "AWS/Lambda",
+              metricName: "Errors",
+              dimensionsMap: {
+                FunctionName: `{{projectName}}-${svc}-${this.stage}`,
+              },
+              statistic: "Sum",
+              period: period(1),
+              label: "Errors",
+              color: cloudwatch.Color.RED,
+            }),
+          ],
+          leftYAxis: { label: "Count", showUnits: false },
+          rightYAxis: { label: "Errors", showUnits: false },
+          view: cloudwatch.GraphWidgetView.TIME_SERIES,
+          liveData: true,
+        })
+    );
+
+    // Row 2: Lambda Duration (p50, p99) per service
+    const durationWidgets = serviceNames.map(
+      (svc) =>
+        new cloudwatch.GraphWidget({
+          title: `Lambda Duration — ${svc}`,
+          width: 12,
+          height: 6,
+          left: [
+            new cloudwatch.Metric({
+              namespace: "AWS/Lambda",
+              metricName: "Duration",
+              dimensionsMap: {
+                FunctionName: `{{projectName}}-${svc}-${this.stage}`,
+              },
+              statistic: "p50",
+              period: period(1),
+              label: "p50 (ms)",
+              color: cloudwatch.Color.GREEN,
+            }),
+            new cloudwatch.Metric({
+              namespace: "AWS/Lambda",
+              metricName: "Duration",
+              dimensionsMap: {
+                FunctionName: `{{projectName}}-${svc}-${this.stage}`,
+              },
+              statistic: "p99",
+              period: period(1),
+              label: "p99 (ms)",
+              color: cloudwatch.Color.ORANGE,
+            }),
+          ],
+          // Threshold annotation so operators immediately see the alarm boundary
+          leftAnnotations: [
+            {
+              value: lambdaDurationThresholdMs,
+              label: `Alarm threshold (${lambdaDurationThresholdMs}ms)`,
+              color: cloudwatch.Color.RED,
+            },
+          ],
+          leftYAxis: { label: "Duration (ms)", showUnits: false },
+        })
+    );
+
+    // Row 3: API Gateway request count and error rates per service
+    const apigWidgets = serviceNames.map(
+      (svc) =>
+        new cloudwatch.GraphWidget({
+          title: `API Gateway — ${svc}`,
+          width: 12,
+          height: 6,
+          left: [
+            new cloudwatch.Metric({
+              namespace: "AWS/ApiGateway",
+              metricName: "Count",
+              dimensionsMap: {
+                ApiName: `{{projectName}}-${svc}-api-${this.stage}`,
+              },
+              statistic: "Sum",
+              period: period(1),
+              label: "Requests",
+            }),
+          ],
+          right: [
+            new cloudwatch.Metric({
+              namespace: "AWS/ApiGateway",
+              metricName: "5XXError",
+              dimensionsMap: {
+                ApiName: `{{projectName}}-${svc}-api-${this.stage}`,
+              },
+              statistic: "Sum",
+              period: period(1),
+              label: "5xx Errors",
+              color: cloudwatch.Color.RED,
+            }),
+            new cloudwatch.Metric({
+              namespace: "AWS/ApiGateway",
+              metricName: "4XXError",
+              dimensionsMap: {
+                ApiName: `{{projectName}}-${svc}-api-${this.stage}`,
+              },
+              statistic: "Sum",
+              period: period(1),
+              label: "4xx Errors",
+              color: cloudwatch.Color.ORANGE,
+            }),
+          ],
+          leftYAxis: { label: "Request Count", showUnits: false },
+          rightYAxis: { label: "Error Count", showUnits: false },
+        })
+    );
+
+    // Row 4: API Gateway Latency per service
+    const latencyWidgets = serviceNames.map(
+      (svc) =>
+        new cloudwatch.GraphWidget({
+          title: `API Gateway Latency — ${svc}`,
+          width: 12,
+          height: 6,
+          left: [
+            new cloudwatch.Metric({
+              namespace: "AWS/ApiGateway",
+              metricName: "Latency",
+              dimensionsMap: {
+                ApiName: `{{projectName}}-${svc}-api-${this.stage}`,
+              },
+              statistic: "p50",
+              period: period(1),
+              label: "p50 (ms)",
+              color: cloudwatch.Color.GREEN,
+            }),
+            new cloudwatch.Metric({
+              namespace: "AWS/ApiGateway",
+              metricName: "Latency",
+              dimensionsMap: {
+                ApiName: `{{projectName}}-${svc}-api-${this.stage}`,
+              },
+              statistic: "p99",
+              period: period(1),
+              label: "p99 (ms)",
+              color: cloudwatch.Color.ORANGE,
+            }),
+          ],
+          leftYAxis: { label: "Latency (ms)", showUnits: false },
+        })
+    );
+
+    // Row 5: Alarm status overview — quick health snapshot at a glance
+    const alarmStatusWidget = new cloudwatch.AlarmStatusWidget({
+      title: "Alarm Status Overview",
+      width: 24,
+      height: 4,
+      alarms: [...lambdaAlarms, ...apigAlarms, compositeAlarm],
+    });
+
+    // Assemble dashboard rows
+    dashboard.addWidgets(
+      // Header text widget
+      new cloudwatch.TextWidget({
+        markdown: [
+          `## {{projectName}} — ${this.stage} Monitoring`,
+          "",
+          `**Stage**: ${this.stage} | **Region**: ${this.region}`,
+          "",
+          "Alarm thresholds: Lambda errors ≥ " +
+            `${lambdaErrorThreshold} per ${lambdaErrorPeriodMinutes}min | ` +
+            `Duration p99 > ${lambdaDurationThresholdMs}ms | ` +
+            `API 5xx ≥ ${apig5xxThreshold} per ${apig5xxPeriodMinutes}min`,
+        ].join("\n"),
+        width: 24,
+        height: 2,
+      })
+    );
+
+    dashboard.addWidgets(alarmStatusWidget);
+    dashboard.addWidgets(...invocationWidgets);
+    dashboard.addWidgets(...durationWidgets);
+    dashboard.addWidgets(...apigWidgets);
+    dashboard.addWidgets(...latencyWidgets);
+
+    // -------------------------------------------------------------------------
+    // Stack outputs
+    // -------------------------------------------------------------------------
+    new cdk.CfnOutput(this, "DashboardUrl", {
+      value: `https://${this.region}.console.aws.amazon.com/cloudwatch/home?region=${this.region}#dashboards:name={{projectName}}-${this.stage}`,
+      description: "CloudWatch Dashboard URL for {{projectName}}",
+      exportName: `{{projectName}}-DashboardUrl-${this.stage}`,
+    });
+
+    new cdk.CfnOutput(this, "AlarmTopicArn", {
+      value: alarmTopic.topicArn,
+      description: "SNS topic ARN for CloudWatch alarm notifications",
+      exportName: `{{projectName}}-AlarmTopicArn-${this.stage}`,
+    });
+  }
+}

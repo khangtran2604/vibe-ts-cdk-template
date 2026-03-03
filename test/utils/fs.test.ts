@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, mkdir, stat, chmod } from "node:fs/promises";
 import { join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { rmSync } from "node:fs";
@@ -393,6 +393,16 @@ describe("copyDir", () => {
     );
   });
 
+  it("renames _github/ directory → .github/ (directory dotfile rename)", async () => {
+    const ghDir = join(srcDir, "_github", "workflows");
+    await mkdir(ghDir, { recursive: true });
+    await writeFile(join(ghDir, "ci.yml"), "name: CI");
+    await copyDir(srcDir, destDir, {}, ALL_OFF);
+    expect(await readDest(join(".github", "workflows", "ci.yml"))).toBe(
+      "name: CI"
+    );
+  });
+
   it("creates nested destination directories as needed", async () => {
     await mkdir(join(srcDir, "a", "b"), { recursive: true });
     await writeFile(join(srcDir, "a", "b", "c.txt"), "abc");
@@ -439,5 +449,36 @@ describe("copyDir", () => {
   it("handles an empty source directory", async () => {
     // Should resolve without error and create the (empty) dest directory.
     await expect(copyDir(srcDir, destDir, {}, ALL_OFF)).resolves.toBeUndefined();
+  });
+
+  it("renames _husky/ directory → .husky/ (models extras template layout)", async () => {
+    const huskyDir = join(srcDir, "_husky");
+    await mkdir(huskyDir, { recursive: true });
+    const hookFile = join(huskyDir, "pre-commit");
+    await writeFile(hookFile, "npx lint-staged\n");
+    await chmod(hookFile, 0o755);
+    await copyDir(srcDir, destDir, {}, ALL_OFF);
+    const content = await readDest(join(".husky", "pre-commit"));
+    expect(content).toBe("npx lint-staged\n");
+  });
+
+  it("mirrors executable bit: source file with chmod 755 → dest file is executable", async () => {
+    const hookFile = join(srcDir, "pre-commit");
+    await writeFile(hookFile, "npx lint-staged\n");
+    await chmod(hookFile, 0o755);
+    await copyDir(srcDir, destDir, {}, ALL_OFF);
+    const destStat = await stat(join(destDir, "pre-commit"));
+    // 0o111 = owner + group + other execute bits
+    expect(destStat.mode & 0o111).not.toBe(0);
+  });
+
+  it("does not make non-executable source files executable in dest", async () => {
+    const normalFile = join(srcDir, "config.json");
+    await writeFile(normalFile, "{}");
+    await chmod(normalFile, 0o644);
+    await copyDir(srcDir, destDir, {}, ALL_OFF);
+    const destStat = await stat(join(destDir, "config.json"));
+    // Should NOT have execute bits set
+    expect(destStat.mode & 0o111).toBe(0);
   });
 });

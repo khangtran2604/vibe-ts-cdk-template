@@ -96,6 +96,9 @@ export function getWorkspaceEntries(features: FeatureFlags): string[] {
   if (features.frontend) entries.push("frontend");
   if (features.auth) entries.push("auth");
   if (features.e2e) entries.push("e2e");
+  // Note: packages/database-client (added when features.database is true)
+  // does NOT need an explicit workspace entry — it is already covered by
+  // the "packages/*" glob above.
 
   return entries;
 }

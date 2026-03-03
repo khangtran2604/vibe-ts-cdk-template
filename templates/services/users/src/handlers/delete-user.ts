@@ -12,18 +12,16 @@
  *   404 — user not found
  */
 
-// @feature:database import { UserRepository } from "../db/user-repository.js";
-
 import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
 } from "aws-lambda";
-import { users } from "../store.js";
+import { userRepository } from "../db/user-repository.js";
 
 const HEADERS = { "Content-Type": "application/json" } as const;
 
 /**
- * Handles DELETE /users/:id — removes a user from the store.
+ * Handles DELETE /users/:id — removes a user via the repository.
  *
  * Returns 204 No Content on success (body is an empty string per the
  * APIGatewayProxyResult shape — the HTTP spec requires no body for 204).
@@ -51,8 +49,7 @@ export async function handler(
     };
   }
 
-  // @feature:database const exists = await userRepository.exists(id);
-  const exists = users.has(id);
+  const exists = await userRepository.exists(id);
 
   if (!exists) {
     return {
@@ -69,8 +66,7 @@ export async function handler(
     };
   }
 
-  // @feature:database await userRepository.delete(id);
-  users.delete(id);
+  await userRepository.delete(id);
 
   // 204 No Content — body must be empty.
   return {

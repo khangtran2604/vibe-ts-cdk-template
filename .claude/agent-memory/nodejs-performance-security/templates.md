@@ -39,7 +39,11 @@ See MEMORY.md for summary. Full conventions documented here.
 - Dev server pattern: `src/app.ts.hbs` exports the Hono app (shared between dev-server and integration tests); `src/dev-server.ts.hbs` imports `app` and calls `serve()`.
 - Integration tests use supertest + `@hono/node-server`'s `serve({ fetch: app.fetch, port: 0 })` for ephemeral port binding. Server is created in `beforeEach`, closed in `afterEach`.
 - `hono`, `@hono/node-server`, `supertest`, `@types/supertest`, `@types/aws-lambda` are ALL devDependencies.
-- `// @feature:database` annotations mark lines to swap in-memory store for a real repository in Phase 6.
+- Handler/repository pattern (Phase 6.5): ALL handlers import `userRepository` from `../db/user-repository.js` (an object, not a class). No `// @feature:database` conditionals remain in handlers.
+- Base (in-memory) repository: `templates/services/users/src/db/user-repository.ts` — delegates to the same `users` Map from `store.ts`. Integration tests clear `users` in `beforeEach` and the repo writes through the same Map, so tests remain isolated.
+- DynamoDB overlay: `templates/database/services/users/src/db/user-repository.ts.hbs` — uses AWS SDK v3 commands (`GetCommand`, `PutCommand`, `DeleteCommand`, `QueryCommand`). `.hbs` extension needed because content contains `@{{projectName}}/database-client` placeholder.
+- Database users package.json overlay: `templates/database/services/users/package.json.hbs` — adds `@{{projectName}}/database-client` and `@aws-sdk/lib-dynamodb` to `dependencies`. This file overwrites the base `package.json.hbs` from the services template when the database feature is enabled.
+- `exactOptionalPropertyTypes: true` in shared tsconfig means `{ region: string | undefined }` is a type error for `DynamoDBClientConfig`. Fix: `new DynamoDBClient(region ? { region } : {})`.
 - `lambdaToHono` adapter MUST forward Hono path params to `event.pathParameters` — fixed in `templates/packages/lambda-utils/src/lambda-adapter.ts` via `c.req.param()`.
 - Status codes: 201 create, 200 get/list/update, 204 delete, 404 not found, 400 bad request.
 - UUID generation: `crypto.randomUUID()` (Node built-in, no uuid package needed).

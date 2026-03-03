@@ -12,19 +12,17 @@
  *   400 — request body is missing or malformed
  */
 
-// @feature:database import { UserRepository } from "../db/user-repository.js";
-
 import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
 } from "aws-lambda";
 import type { CreateUserBody, User } from "../types/index.js";
-import { users } from "../store.js";
+import { userRepository } from "../db/user-repository.js";
 
 const HEADERS = { "Content-Type": "application/json" } as const;
 
 /**
- * Handles POST /users — creates a new user and stores it in memory.
+ * Handles POST /users — creates a new user and persists it via the repository.
  *
  * @param event - API Gateway proxy event.
  * @returns 201 with the created user, or 400 if the body is invalid.
@@ -97,8 +95,7 @@ export async function handler(
     updatedAt: now,
   };
 
-  // @feature:database await userRepository.create(user);
-  users.set(user.id, user);
+  await userRepository.create(user);
 
   return {
     statusCode: 201,

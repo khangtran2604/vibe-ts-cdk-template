@@ -13,14 +13,12 @@
  *   404 — user not found
  */
 
-// @feature:database import { UserRepository } from "../db/user-repository.js";
-
 import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
 } from "aws-lambda";
 import type { UpdateUserBody } from "../types/index.js";
-import { users } from "../store.js";
+import { userRepository } from "../db/user-repository.js";
 
 const HEADERS = { "Content-Type": "application/json" } as const;
 
@@ -72,8 +70,7 @@ export async function handler(
     };
   }
 
-  // @feature:database const existing = await userRepository.findById(id);
-  const existing = users.get(id);
+  const existing = await userRepository.findById(id);
 
   if (!existing) {
     return {
@@ -102,8 +99,7 @@ export async function handler(
     updatedAt: new Date().toISOString(),
   };
 
-  // @feature:database await userRepository.update(id, updated);
-  users.set(id, updated);
+  await userRepository.update(id, updated);
 
   return {
     statusCode: 200,

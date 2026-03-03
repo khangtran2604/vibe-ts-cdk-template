@@ -4,6 +4,8 @@ import {
   writeFile,
   mkdir,
   copyFile,
+  stat,
+  chmod,
 } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { FeatureFlags } from "../types.js";
@@ -51,6 +53,15 @@ const BINARY_EXTENSIONS = new Set([
  */
 const CONDITIONAL_RE = /^(\s*)\/\/ @feature:(\w+) (.*)$/;
 
+/**
+ * Bitmask for the execute permission bits (owner, group, others).
+ * Used to detect whether a source file is executable and mirror that
+ * permission on the copied destination file.
+ *
+ * 0o111 = S_IXUSR | S_IXGRP | S_IXOTH
+ */
+const EXEC_BITS = 0o111;
+
 // ---------------------------------------------------------------------------
 // Public helpers — pure functions (no I/O), easy to unit-test
 // ---------------------------------------------------------------------------
@@ -65,6 +76,9 @@ const CONDITIONAL_RE = /^(\s*)\/\/ @feature:(\w+) (.*)$/;
  *
  * Both transforms can apply to the same name:
  *  `_eslintrc.json.hbs` → `.eslintrc.json`
+ *
+ * The same function is applied to both file names and directory names, so
+ * `_husky` → `.husky` works for directories just as it does for files.
  *
  * @param filename - The raw basename from the template directory.
  * @returns The destination filename.
@@ -192,12 +206,18 @@ function isBinaryFile(filename: string): boolean {
  * For each file the following pipeline runs (in order):
  *  1. Skip OS artefacts (`.DS_Store`, etc.).
  *  2. Rename: `_` prefix → `.`, `.hbs` suffix stripped ({@link renameFile}).
+ *     This transform is applied to **both files and directories**, so
+ *     `_husky/` becomes `.husky/` in the generated project.
  *  3. Path containment check: rejects any entry whose resolved destination
  *     falls outside the `dest` root (guards against path-traversal in
  *     template filenames).
  *  4. Binary detection: binary files are copied without further transforms.
  *  5. {@link replaceVariables}: `{{key}}` substitution.
  *  6. {@link processConditionals}: `// @feature:X` line inclusion/removal.
+ *  7. Executable permission mirroring: if the source file has any execute
+ *     bits set (owner/group/others), the destination file receives `chmod 755`.
+ *     This ensures shell scripts such as `.husky/pre-commit` remain runnable
+ *     in the generated project.
  *
  * Destination sub-directories are created with `mkdir({ recursive: true })`
  * so there is no need for the caller to pre-create the tree.
@@ -234,8 +254,9 @@ export async function copyDir(
       const srcPath = join(src, entry.name);
 
       if (entry.isDirectory()) {
-        // Recurse — directory names are not transformed.
-        const destSubdir = join(dest, entry.name);
+        // Apply renameFile to directory names for the same `_` → `.` transform
+        // used on files (e.g. `_husky` → `.husky`).
+        const destSubdir = join(dest, renameFile(entry.name));
         await copyDir(srcPath, destSubdir, variables, features);
         return;
       }
@@ -277,6 +298,15 @@ export async function copyDir(
       content = replaceVariables(content, variables);
       content = processConditionals(content, features);
       await writeFile(destPath, content, "utf8");
+
+      // Mirror executable permission: if the source has any execute bit set
+      // (owner, group, or others), mark the destination executable (755).
+      // This is essential for shell hook scripts such as `.husky/pre-commit`
+      // which must be executable for Husky to invoke them.
+      const srcStat = await stat(srcPath);
+      if (srcStat.mode & EXEC_BITS) {
+        await chmod(destPath, 0o755);
+      }
     })
   );
 }
