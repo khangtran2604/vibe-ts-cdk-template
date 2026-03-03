@@ -70,5 +70,14 @@
 - Dynamic `await import()` after vi.mock/vi.stubEnv for modules with top-level side effects
 - `copyDir` integration tests use real temp dirs
 
+## Module Generator (Phase 2+)
+- Template dirs: `templates/generators/module/` (CRUD service) + `templates/generators/infra-stack/` (CDK stack)
+- 8 placeholder keys: moduleName, ModuleName, entityName, EntityName, entityNameLower, flatLower, port, projectName
+- Marker comments: `// @module-inject:import`, `// @module-inject:instance`, `// @module-inject:route`
+- Handler naming: `{verb}-{entity}.ts` (e.g., `create-user.ts`, `list-users.ts`) -- infra-stack must match
+- `src/module-helpers.ts` -- injectBeforeMarker(), toPascalCase(), toEntityName(), getModuleVariableMap()
+- `src/module-context.ts` -- detectProjectContext(), readProjectName(), scanNextPort()
+- `src/utils/paths.ts` -- pathExists(), resolveTemplateRoot() (extracted from scaffolder.ts)
+
 ## Package Versions
 - All dependency versions pinned in CLAUDE.md -- always verify with `npm view`
