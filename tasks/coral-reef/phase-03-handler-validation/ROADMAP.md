@@ -9,15 +9,15 @@ Phase 2 complete -- Zod schemas must exist in both users service and module gene
 ## Tasks
 | # | Task | Complexity | Dependencies | Status |
 |---|------|-----------|--------------|--------|
-| 3.1 | Migrate users create handler to Zod validation | Medium | 2.1 | ⬜ Not Started |
-| 3.2 | Migrate users update handler to Zod validation | Medium | 2.1 | ⬜ Not Started |
-| 3.3 | Migrate module create handler template to Zod | Medium | 2.2 | ⬜ Not Started |
-| 3.4 | Migrate module update handler template to Zod | Medium | 2.2 | ⬜ Not Started |
+| 3.1 | Migrate users create handler to Zod validation | Medium | 2.1 | ✅ Complete |
+| 3.2 | Migrate users update handler to Zod validation | Medium | 2.1 | ✅ Complete |
+| 3.3 | Migrate module create handler template to Zod | Medium | 2.2 | ✅ Complete |
+| 3.4 | Migrate module update handler template to Zod | Medium | 2.2 | ✅ Complete |
 
 ## Phase Completion Criteria
-- [ ] All create/update handlers use `Schema.safeParse()` instead of manual validation
-- [ ] Validation errors return proper fieldErrors from Zod issues
-- [ ] Error response format matches existing envelope structure (success:false, error.code, etc.)
-- [ ] Handler behavior is functionally equivalent (same status codes, same response shapes)
+- [x] All create/update handlers use `Schema.safeParse()` instead of manual validation
+- [x] Validation errors return proper fieldErrors from Zod issues
+- [x] Error response format matches existing envelope structure (success:false, error.code, etc.)
+- [x] Handler behavior is functionally equivalent (same status codes, same response shapes)
 
-## Progress: 0/4 tasks complete
+## Progress: 4/4 tasks complete

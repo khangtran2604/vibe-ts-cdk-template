@@ -34,4 +34,4 @@ Replace manual validation in the users service update handler with Zod `safePars
 Medium -- Same pattern as 3.1 but for update logic
 
 ## Status
-- [ ] Not Started
+- [x] Complete

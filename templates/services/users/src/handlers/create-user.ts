@@ -9,14 +9,15 @@
  *
  * Responses:
  *   201 — user created successfully
- *   400 — request body is missing or malformed
+ *   400 — request body is missing, malformed JSON, or fails schema validation
  */
 
 import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
 } from "aws-lambda";
-import type { CreateUserBody, User } from "../types/index.js";
+import type { User } from "../schemas/index.js";
+import { CreateUserBodySchema } from "../schemas/index.js";
 import { userRepository } from "../db/user-repository.js";
 
 const HEADERS = { "Content-Type": "application/json" } as const;
@@ -25,18 +26,19 @@ const HEADERS = { "Content-Type": "application/json" } as const;
  * Handles POST /users — creates a new user and persists it via the repository.
  *
  * @param event - API Gateway proxy event.
- * @returns 201 with the created user, or 400 if the body is invalid.
+ * @returns 201 with the created user, or 400 if the body is missing, malformed,
+ *   or does not satisfy the CreateUserBodySchema.
  */
 export async function handler(
   event: APIGatewayProxyEvent
 ): Promise<APIGatewayProxyResult> {
-  // Parse and validate request body.
-  let body: CreateUserBody;
+  // Guard: body must be present and parseable as JSON.
+  let parsedBody: unknown;
   try {
     if (!event.body) {
       throw new Error("Request body is required");
     }
-    body = JSON.parse(event.body) as CreateUserBody;
+    parsedBody = JSON.parse(event.body);
   } catch {
     return {
       statusCode: 400,
@@ -52,9 +54,14 @@ export async function handler(
     };
   }
 
-  const { name, email } = body;
-
-  if (typeof name !== "string" || name.trim() === "") {
+  // Validate the parsed payload against the schema.
+  const parsed = CreateUserBodySchema.safeParse(parsedBody);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.length > 0 ? issue.path.join(".") : "_root";
+      fieldErrors[key] = issue.message;
+    }
     return {
       statusCode: 400,
       headers: HEADERS,
@@ -62,29 +69,15 @@ export async function handler(
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Field 'name' is required and must be a non-empty string",
-          fieldErrors: { name: "Required" },
+          message: "Request body validation failed",
+          fieldErrors,
         },
         timestamp: new Date().toISOString(),
       }),
     };
   }
 
-  if (typeof email !== "string" || email.trim() === "") {
-    return {
-      statusCode: 400,
-      headers: HEADERS,
-      body: JSON.stringify({
-        success: false,
-        error: {
-          code: "VALIDATION_ERROR",
-          message: "Field 'email' is required and must be a non-empty string",
-          fieldErrors: { email: "Required" },
-        },
-        timestamp: new Date().toISOString(),
-      }),
-    };
-  }
+  const { name, email } = parsed.data;
 
   const now = new Date().toISOString();
   const user: User = {

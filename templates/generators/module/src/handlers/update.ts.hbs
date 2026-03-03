@@ -9,7 +9,7 @@
  *
  * Responses:
  *   200 — {{entityNameLower}} updated successfully
- *   400 — id missing or body is malformed
+ *   400 — id missing, body is malformed, or validation fails
  *   404 — {{entityNameLower}} not found
  */
 
@@ -17,7 +17,7 @@ import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
 } from "aws-lambda";
-import type { Update{{EntityName}}Body } from "../types/index.js";
+import { Update{{EntityName}}BodySchema } from "../schemas/index.js";
 import { {{entityNameLower}}Repository } from "../db/repository.js";
 
 const HEADERS = { "Content-Type": "application/json" } as const;
@@ -48,13 +48,12 @@ export async function handler(
     };
   }
 
-  // Parse request body.
-  let body: Update{{EntityName}}Body;
+  let parsedBody: unknown;
   try {
     if (!event.body) {
       throw new Error("Request body is required");
     }
-    body = JSON.parse(event.body) as Update{{EntityName}}Body;
+    parsedBody = JSON.parse(event.body);
   } catch {
     return {
       statusCode: 400,
@@ -64,6 +63,28 @@ export async function handler(
         error: {
           code: "BAD_REQUEST",
           message: "Request body must be valid JSON",
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    };
+  }
+
+  const parsed = Update{{EntityName}}BodySchema.safeParse(parsedBody);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.length > 0 ? issue.path.join(".") : "_root";
+      fieldErrors[key] = issue.message;
+    }
+    return {
+      statusCode: 400,
+      headers: HEADERS,
+      body: JSON.stringify({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Request body validation failed",
+          fieldErrors,
         },
         timestamp: new Date().toISOString(),
       }),
@@ -87,12 +108,9 @@ export async function handler(
     };
   }
 
-  // Apply only the provided fields.
   const updated = {
     ...existing,
-    ...(typeof body.name === "string" && body.name.trim() !== ""
-      ? { name: body.name.trim() }
-      : {}),
+    ...(parsed.data.name !== undefined ? { name: parsed.data.name.trim() } : {}),
     updatedAt: new Date().toISOString(),
   };
 

@@ -17,7 +17,7 @@ import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
 } from "aws-lambda";
-import type { UpdateUserBody } from "../types/index.js";
+import { UpdateUserBodySchema } from "../schemas/index.js";
 import { userRepository } from "../db/user-repository.js";
 
 const HEADERS = { "Content-Type": "application/json" } as const;
@@ -48,13 +48,13 @@ export async function handler(
     };
   }
 
-  // Parse request body.
-  let body: UpdateUserBody;
+  // Parse request body — guard against malformed JSON first.
+  let parsedBody: unknown;
   try {
     if (!event.body) {
       throw new Error("Request body is required");
     }
-    body = JSON.parse(event.body) as UpdateUserBody;
+    parsedBody = JSON.parse(event.body);
   } catch {
     return {
       statusCode: 400,
@@ -64,6 +64,29 @@ export async function handler(
         error: {
           code: "BAD_REQUEST",
           message: "Request body must be valid JSON",
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    };
+  }
+
+  // Validate body shape and field constraints with Zod.
+  const parsed = UpdateUserBodySchema.safeParse(parsedBody);
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.length > 0 ? issue.path.join(".") : "_root";
+      fieldErrors[key] = issue.message;
+    }
+    return {
+      statusCode: 400,
+      headers: HEADERS,
+      body: JSON.stringify({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Request body validation failed",
+          fieldErrors,
         },
         timestamp: new Date().toISOString(),
       }),
@@ -87,14 +110,13 @@ export async function handler(
     };
   }
 
-  // Apply only the provided fields.
+  // Apply only the fields that were supplied in the validated body.
+  // Zod guarantees the types; trim name and lowercase email for storage consistency.
   const updated = {
     ...existing,
-    ...(typeof body.name === "string" && body.name.trim() !== ""
-      ? { name: body.name.trim() }
-      : {}),
-    ...(typeof body.email === "string" && body.email.trim() !== ""
-      ? { email: body.email.trim().toLowerCase() }
+    ...(parsed.data.name !== undefined ? { name: parsed.data.name.trim() } : {}),
+    ...(parsed.data.email !== undefined
+      ? { email: parsed.data.email.trim().toLowerCase() }
       : {}),
     updatedAt: new Date().toISOString(),
   };

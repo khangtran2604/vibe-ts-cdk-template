@@ -33,4 +33,4 @@ Replace manual validation in the module generator's create handler template with
 Medium -- Template variable handling adds slight complexity
 
 ## Status
-- [ ] Not Started
+- [x] Complete
