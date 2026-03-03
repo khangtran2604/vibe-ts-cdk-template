@@ -90,27 +90,37 @@ export function createProgram(): Command {
 
       // Run the scaffolding engine.  Errors are caught here so we can display
       // a user-friendly message via clack before exiting with a non-zero code.
+      //
+      // A SIGINT handler is registered for the duration of the scaffold call so
+      // that Ctrl+C during file copying or pnpm install exits cleanly (with an
+      // outro message) rather than leaving a broken spinner on screen.
+      const onSigint = () => {
+        clack.outro("Scaffolding cancelled.");
+        process.exit(0);
+      };
+      process.on("SIGINT", onSigint);
       try {
         await scaffold(config);
       } catch (err: unknown) {
         clack.log.error(err instanceof Error ? err.message : String(err));
         process.exit(1);
+      } finally {
+        process.off("SIGINT", onSigint);
       }
 
       // Build the contextual "Next steps" outro message.
       // When --no-install was used, remind the user to run pnpm install first.
-      const nextSteps = config.installDeps
-        ? [
-            `  cd ${config.projectName}`,
-            `  pnpm dev`,
-            `  pnpm cdk deploy --all`,
-          ]
-        : [
-            `  cd ${config.projectName}`,
-            `  pnpm install`,
-            `  pnpm dev`,
-            `  pnpm cdk deploy --all`,
-          ];
+      // When the preset is "full", e2e tests are available so pnpm test is included.
+      const baseSteps = config.installDeps
+        ? [`  cd ${config.projectName}`, `  pnpm dev`]
+        : [`  cd ${config.projectName}`, `  pnpm install`, `  pnpm dev`];
+
+      if (config.preset === "full") {
+        baseSteps.push(`  pnpm test`);
+      }
+      baseSteps.push(`  pnpm cdk deploy --all`);
+
+      const nextSteps = baseSteps;
 
       clack.outro(`Done! Next steps:\n${nextSteps.join("\n")}`);
     });

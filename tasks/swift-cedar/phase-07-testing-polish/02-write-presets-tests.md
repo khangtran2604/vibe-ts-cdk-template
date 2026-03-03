@@ -33,4 +33,4 @@ Create unit tests for the preset-to-feature-flags mapping in `test/presets.test.
 Low -- Simple pure function tests
 
 ## Status
-- [ ] Not Started
+- [x] Complete

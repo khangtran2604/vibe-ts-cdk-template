@@ -65,7 +65,9 @@ async function isPnpmAvailable(): Promise<boolean> {
  */
 export async function installDeps(dir: string): Promise<PnpmResult> {
   if (!(await isPnpmAvailable())) {
-    const msg = "pnpm is not installed or not on $PATH — skipping install.";
+    const msg =
+      "pnpm is not installed or not on $PATH — skipping install.\n" +
+      "  Install pnpm: https://pnpm.io/installation";
     logger.warn(msg);
     return { success: false, error: msg };
   }

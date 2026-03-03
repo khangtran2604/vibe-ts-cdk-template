@@ -34,4 +34,4 @@ Create unit tests for the template helper functions in `test/template-helpers.te
 Low -- Pure function tests with clear expected outputs
 
 ## Status
-- [ ] Not Started
+- [x] Complete

@@ -60,7 +60,9 @@ async function isGitAvailable(): Promise<boolean> {
  */
 export async function initGit(dir: string): Promise<GitResult> {
   if (!(await isGitAvailable())) {
-    const msg = "git is not installed or not on $PATH — skipping git init.";
+    const msg =
+      "git is not installed or not on $PATH — skipping git init.\n" +
+      "  Install git: https://git-scm.com/downloads";
     logger.warn(msg);
     return { success: false, error: msg };
   }
