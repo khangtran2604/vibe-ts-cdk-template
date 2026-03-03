@@ -36,12 +36,14 @@ const {
   mockLogError,
   mockConfirm,
   mockIsCancel,
+  mockMultiselect,
   mockSpinnerStart,
   mockSpinnerStop,
   mockSpinnerFactory,
   mockDetectProjectContext,
   mockReadProjectName,
   mockScanNextPort,
+  mockDetectAuthSupport,
 } = vi.hoisted(() => {
   const mockSpinnerStart = vi.fn();
   const mockSpinnerStop = vi.fn();
@@ -57,12 +59,16 @@ const {
     mockLogError: vi.fn(),
     mockConfirm: vi.fn().mockResolvedValue(true),
     mockIsCancel: vi.fn().mockReturnValue(false),
+    mockMultiselect: vi
+      .fn()
+      .mockResolvedValue(["list", "get", "create", "update", "delete"]),
     mockSpinnerStart,
     mockSpinnerStop,
     mockSpinnerFactory,
     mockDetectProjectContext: vi.fn().mockResolvedValue(undefined),
     mockReadProjectName: vi.fn().mockResolvedValue("my-app"),
     mockScanNextPort: vi.fn().mockResolvedValue(3003),
+    mockDetectAuthSupport: vi.fn().mockResolvedValue(true),
   };
 });
 
@@ -77,6 +83,7 @@ vi.mock("@clack/prompts", () => ({
   log: { error: mockLogError },
   confirm: mockConfirm,
   isCancel: mockIsCancel,
+  multiselect: mockMultiselect,
   spinner: mockSpinnerFactory,
 }));
 
@@ -84,6 +91,7 @@ vi.mock("../src/module-context.js", () => ({
   detectProjectContext: mockDetectProjectContext,
   readProjectName: mockReadProjectName,
   scanNextPort: mockScanNextPort,
+  detectAuthSupport: mockDetectAuthSupport,
 }));
 
 // Import after mocks are in place.
@@ -121,7 +129,7 @@ function mockProcessExit() {
  */
 async function runAndCatchExit(
   name: string,
-  flags: { yes?: boolean; install?: boolean },
+  flags: { yes?: boolean; install?: boolean; protected?: boolean },
 ): Promise<{ config?: ModuleConfig; exitError?: ExitError }> {
   try {
     const config = await runModulePrompts(name, flags);
@@ -150,6 +158,8 @@ beforeEach(() => {
   mockScanNextPort.mockResolvedValue(3003);
   mockConfirm.mockResolvedValue(true);
   mockIsCancel.mockReturnValue(false);
+  mockMultiselect.mockResolvedValue(["list", "get", "create", "update", "delete"]);
+  mockDetectAuthSupport.mockResolvedValue(true);
   mockSpinnerFactory.mockReturnValue({
     start: mockSpinnerStart,
     stop: mockSpinnerStop,
@@ -535,5 +545,169 @@ describe("clack intro and spinner", () => {
     await runAndCatchExit("orders", { yes: true });
     const [noteContent] = mockNote.mock.calls[0] as [string];
     expect(noteContent).toContain("3007");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --protected flag — auth support check
+// ---------------------------------------------------------------------------
+
+describe("--protected flag: auth support detection", () => {
+  it("should call detectAuthSupport with projectDir when --protected is set", async () => {
+    await runAndCatchExit("orders", { yes: true, protected: true });
+    expect(mockDetectAuthSupport).toHaveBeenCalledWith("/home/user/my-app");
+  });
+
+  it("should NOT call detectAuthSupport when --protected is not set", async () => {
+    await runAndCatchExit("orders", { yes: true });
+    expect(mockDetectAuthSupport).not.toHaveBeenCalled();
+  });
+
+  it("should exit(1) when detectAuthSupport returns false", async () => {
+    mockDetectAuthSupport.mockResolvedValue(false);
+    const { exitError } = await runAndCatchExit("orders", {
+      yes: true,
+      protected: true,
+    });
+    expect(exitError?.code).toBe(1);
+  });
+
+  it("should log an error mentioning auth support when detectAuthSupport returns false", async () => {
+    mockDetectAuthSupport.mockResolvedValue(false);
+    await runAndCatchExit("orders", { yes: true, protected: true });
+    expect(mockLogError).toHaveBeenCalledOnce();
+    const [errMsg] = mockLogError.mock.calls[0] as [string];
+    expect(errMsg).toMatch(/auth/i);
+  });
+
+  it("should NOT exit when detectAuthSupport returns true", async () => {
+    mockDetectAuthSupport.mockResolvedValue(true);
+    const { exitError } = await runAndCatchExit("orders", {
+      yes: true,
+      protected: true,
+    });
+    expect(exitError).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --protected -y — skips multiselect, all 5 endpoints set to true
+// ---------------------------------------------------------------------------
+
+describe("--protected with -y flag", () => {
+  it("should return a config with protectedEndpoints defined when --protected -y is used", async () => {
+    const { config } = await runAndCatchExit("orders", {
+      yes: true,
+      protected: true,
+    });
+    expect(config?.protectedEndpoints).toBeDefined();
+  });
+
+  it("should set all 5 endpoints to true when --protected -y is used", async () => {
+    const { config } = await runAndCatchExit("orders", {
+      yes: true,
+      protected: true,
+    });
+    expect(config?.protectedEndpoints).toEqual({
+      list: true,
+      get: true,
+      create: true,
+      update: true,
+      delete: true,
+    });
+  });
+
+  it("should NOT call clack.multiselect when --protected -y is used", async () => {
+    await runAndCatchExit("orders", { yes: true, protected: true });
+    expect(mockMultiselect).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --protected interactive mode (no -y) — calls multiselect
+// ---------------------------------------------------------------------------
+
+describe("--protected interactive mode (no -y)", () => {
+  it("should call clack.multiselect when --protected is set without -y", async () => {
+    await runAndCatchExit("orders", { protected: true });
+    expect(mockMultiselect).toHaveBeenCalledOnce();
+  });
+
+  it("should call clack.multiselect with a message about authentication", async () => {
+    await runAndCatchExit("orders", { protected: true });
+    const [opts] = mockMultiselect.mock.calls[0] as [{ message: string }];
+    expect(opts.message).toMatch(/authentication/i);
+  });
+
+  it("should call clack.multiselect with all 5 endpoint options", async () => {
+    await runAndCatchExit("orders", { protected: true });
+    const [opts] = mockMultiselect.mock.calls[0] as [
+      { options: Array<{ value: string }> },
+    ];
+    const values = opts.options.map((o) => o.value);
+    expect(values).toEqual(
+      expect.arrayContaining(["list", "get", "create", "update", "delete"]),
+    );
+    expect(values).toHaveLength(5);
+  });
+
+  it("should build protectedEndpoints from the multiselect selections", async () => {
+    mockMultiselect.mockResolvedValue(["list", "create"]);
+    const { config } = await runAndCatchExit("orders", { protected: true });
+    expect(config?.protectedEndpoints).toEqual({
+      list: true,
+      get: false,
+      create: true,
+      update: false,
+      delete: false,
+    });
+  });
+
+  it("should set all 5 endpoints to true when multiselect returns all values", async () => {
+    mockMultiselect.mockResolvedValue([
+      "list",
+      "get",
+      "create",
+      "update",
+      "delete",
+    ]);
+    const { config } = await runAndCatchExit("orders", { protected: true });
+    expect(config?.protectedEndpoints).toEqual({
+      list: true,
+      get: true,
+      create: true,
+      update: true,
+      delete: true,
+    });
+  });
+
+  it("should exit(0) when the user cancels the multiselect prompt", async () => {
+    const cancelSymbol = Symbol("cancel");
+    mockIsCancel.mockReturnValue(true);
+    mockMultiselect.mockResolvedValue(cancelSymbol);
+
+    const { exitError } = await runAndCatchExit("orders", { protected: true });
+    expect(exitError?.code).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Without --protected — protectedEndpoints is undefined
+// ---------------------------------------------------------------------------
+
+describe("without --protected flag", () => {
+  it("should return protectedEndpoints as undefined when --protected is not set", async () => {
+    const { config } = await runAndCatchExit("orders", { yes: true });
+    expect(config?.protectedEndpoints).toBeUndefined();
+  });
+
+  it("should return protectedEndpoints as undefined when flags object is empty", async () => {
+    const { config } = await runAndCatchExit("orders", {});
+    expect(config?.protectedEndpoints).toBeUndefined();
+  });
+
+  it("should NOT call clack.multiselect when --protected is not set", async () => {
+    await runAndCatchExit("orders", { yes: true });
+    expect(mockMultiselect).not.toHaveBeenCalled();
   });
 });

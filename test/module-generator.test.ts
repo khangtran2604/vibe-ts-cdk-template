@@ -639,3 +639,257 @@ describe("generateModule — multiple modules injected sequentially", () => {
     expect(gatewayContent).toContain("// @module-inject:route");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Protected endpoints — CDK stack auth variables
+// ---------------------------------------------------------------------------
+
+describe("generateModule — protected endpoints", () => {
+  it("should include TokenAuthorizer in the stack file when all endpoints are protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    expect(stackContent).toContain("TokenAuthorizer");
+  });
+
+  it("should include Fn.importValue in the stack file when all endpoints are protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    expect(stackContent).toContain("Fn.importValue");
+  });
+
+  it("should include authorizationType: apigateway.AuthorizationType.CUSTOM when all endpoints are protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    expect(stackContent).toContain("authorizationType: apigateway.AuthorizationType.CUSTOM");
+  });
+
+  it("should include the AuthorizerFunctionArn export name pattern in the authorizerSetup block", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    // The authorizerSetup block includes a Fn.importValue call whose argument
+    // contains the "AuthorizerFunctionArn" suffix — this string is hardcoded
+    // inside buildAuthorizerSetup() and must survive the substitution pass.
+    expect(stackContent).toContain("AuthorizerFunctionArn");
+  });
+
+  it("should add the authorizer reference to every protected addMethod call", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    // authMethodOptions produces "authorizer," inside the method options object —
+    // one occurrence per protected endpoint (5 endpoints → 5 occurrences).
+    const authorizerOccurrences = (stackContent.match(/\bauthorizer,/g) ?? []).length;
+    expect(authorizerOccurrences).toBe(5);
+  });
+
+  it("should resolve {{projectName}} inside the authorizerSetup block to the actual project name", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    // The authorizerSetup block embeds {{projectName}} — it must be resolved
+    // to the actual project name during variable substitution.
+    expect(stackContent).toContain("test-app-AuthorizerFunctionArn");
+    expect(stackContent).not.toContain("{{projectName}}");
+  });
+
+  it("should resolve {{ModuleName}} inside the authorizerSetup block to the actual module name", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    // The authorizerSetup block embeds {{ModuleName}} — it must be resolved.
+    expect(stackContent).toContain("OrderItemsAuthorizer");
+    expect(stackContent).not.toContain("{{ModuleName}}");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Unprotected endpoints — no authorizer code in stack file
+// ---------------------------------------------------------------------------
+
+describe("generateModule — unprotected endpoints (default)", () => {
+  it("should NOT include TokenAuthorizer in the stack file when protectedEndpoints is omitted", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    expect(stackContent).not.toContain("TokenAuthorizer");
+  });
+
+  it("should NOT include Fn.importValue in the stack file when protectedEndpoints is omitted", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    expect(stackContent).not.toContain("Fn.importValue");
+  });
+
+  it("should NOT include authorizationType in the stack file when protectedEndpoints is omitted", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    expect(stackContent).not.toContain("authorizationType");
+  });
+
+  it("should NOT include TokenAuthorizer when all protectedEndpoints flags are false", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: false,
+          update: false,
+          delete: false,
+        },
+      })
+    );
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    expect(stackContent).not.toContain("TokenAuthorizer");
+    expect(stackContent).not.toContain("authorizationType");
+  });
+
+  it("should leave no extra blank lines from empty auth variable substitution", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    // Empty string substitution for inline placeholders ({{authorizerSetup}},
+    // {{listAuthOptions}}, etc.) must not produce consecutive triple newlines
+    // (i.e. two blank lines in a row), which would indicate a spurious blank
+    // line was injected by the empty replacement.
+    expect(stackContent).not.toContain("\n\n\n");
+  });
+
+  it("should leave no residual {{auth*}} placeholder tokens in the unprotected stack file", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    expect(stackContent).not.toMatch(/\{\{auth\w+\}\}/);
+  });
+
+  it("should produce addMethod calls without an options argument when unprotected", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const stackContent = await readFile(
+      join(tempDir, "infra", "src", "stacks", "modules", "order-items-stack.ts"),
+      "utf8"
+    );
+    // Every addMethod call should close with `{ proxy: true })` on the same line
+    // (no trailing comma leading into an options block).
+    const addMethodCalls = stackContent.match(/\.addMethod\([\s\S]*?\)/g) ?? [];
+    // There should be exactly 5 addMethod calls (list, create, get, update, delete).
+    expect(addMethodCalls.length).toBe(5);
+    // None should reference an authorizer.
+    expect(stackContent).not.toContain("authorizer,");
+  });
+});

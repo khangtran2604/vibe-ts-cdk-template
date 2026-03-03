@@ -9,15 +9,15 @@ Phases 1 and 2 complete -- all implementation must be in place before testing.
 ## Tasks
 | # | Task | Complexity | Dependencies | Status |
 |---|------|-----------|--------------|--------|
-| 3.1 | Unit tests for detectAuthSupport and auth variable map | Medium | 1.2, 1.3 | ⬜ Not Started |
-| 3.2 | Unit tests for protected prompt flow | Medium | 2.2, 3.1 | ⬜ Not Started |
-| 3.3 | Integration test for protected module generation | Medium | 2.1, 2.3, 3.1, 3.2 | ⬜ Not Started |
-| 3.4 | End-to-end verification | Low | 3.3 | ⬜ Not Started |
+| 3.1 | Unit tests for detectAuthSupport and auth variable map | Medium | 1.2, 1.3 | ✅ Complete |
+| 3.2 | Unit tests for protected prompt flow | Medium | 2.2, 3.1 | ✅ Complete |
+| 3.3 | Integration test for protected module generation | Medium | 2.1, 2.3, 3.1, 3.2 | ✅ Complete |
+| 3.4 | End-to-end verification | Low | 3.3 | ✅ Complete |
 
 ## Phase Completion Criteria
-- [ ] All unit tests pass
-- [ ] Integration test confirms protected and unprotected output correctness
-- [ ] E2E verification confirms the feature works in a real scaffolded project
-- [ ] `pnpm build && pnpm test` is fully green
+- [x] All unit tests pass
+- [x] Integration test confirms protected and unprotected output correctness
+- [x] E2E verification confirms the feature works in a real scaffolded project
+- [x] `pnpm build && pnpm test` is fully green
 
-## Progress: 0/4 tasks complete
+## Progress: 4/4 tasks complete

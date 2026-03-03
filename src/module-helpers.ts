@@ -110,6 +110,15 @@ export function getModuleVariableMap(config: ModuleConfig): Record<string, strin
   const hasAnyProtected = pe != null && Object.values(pe).some(Boolean);
 
   return {
+    // authorizerSetup must come before ModuleName and projectName so that
+    // the {{ModuleName}} and {{projectName}} placeholders it embeds are
+    // resolved when replaceVariables() processes those keys later.
+    authorizerSetup: hasAnyProtected ? buildAuthorizerSetup() : "",
+    listAuthOptions: authMethodOptions(pe?.list),
+    getAuthOptions: authMethodOptions(pe?.get),
+    createAuthOptions: authMethodOptions(pe?.create),
+    updateAuthOptions: authMethodOptions(pe?.update),
+    deleteAuthOptions: authMethodOptions(pe?.delete),
     moduleName: config.moduleName,
     ModuleName: toPascalCase(config.moduleName),
     entityName: config.entityName,
@@ -118,12 +127,6 @@ export function getModuleVariableMap(config: ModuleConfig): Record<string, strin
     flatLower: toFlatLower(config.moduleName),
     port: String(config.port),
     projectName: config.projectName,
-    authorizerSetup: hasAnyProtected ? buildAuthorizerSetup() : "",
-    listAuthOptions: authMethodOptions(pe?.list),
-    getAuthOptions: authMethodOptions(pe?.get),
-    createAuthOptions: authMethodOptions(pe?.create),
-    updateAuthOptions: authMethodOptions(pe?.update),
-    deleteAuthOptions: authMethodOptions(pe?.delete),
   };
 }
 
