@@ -9,13 +9,13 @@ Phase 1 complete -- shared-types schemas and dependencies must be in place.
 ## Tasks
 | # | Task | Complexity | Dependencies | Status |
 |---|------|-----------|--------------|--------|
-| 2.1 | Create users service Zod schemas | Medium | 1.1 | ⬜ Not Started |
-| 2.2 | Create module generator Zod schema template | Medium | 1.1 | ⬜ Not Started |
-| 2.3 | Migrate types to re-export from schemas | Low | 2.1, 2.2 | ⬜ Not Started |
+| 2.1 | Create users service Zod schemas | Medium | 1.1 | ✅ Complete |
+| 2.2 | Create module generator Zod schema template | Medium | 1.1 | ✅ Complete |
+| 2.3 | Migrate types to re-export from schemas | Low | 2.1, 2.2 | ✅ Complete |
 
 ## Phase Completion Criteria
-- [ ] Users service has `src/schemas/index.ts` with User, CreateUserBody, UpdateUserBody schemas
-- [ ] Module generator has `src/schemas/index.ts.hbs` with templated entity schemas
-- [ ] Both services' `types/index.ts` files re-export types from schemas (preserving existing import paths)
+- [x] Users service has `src/schemas/index.ts` with User, CreateUserBody, UpdateUserBody schemas
+- [x] Module generator has `src/schemas/index.ts.hbs` with templated entity schemas
+- [x] Both services' `types/index.ts` files re-export types from schemas (preserving existing import paths)
 
-## Progress: 0/3 tasks complete
+## Progress: 3/3 tasks complete

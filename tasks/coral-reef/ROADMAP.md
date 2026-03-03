@@ -10,7 +10,7 @@
 | Phase | Title | Tasks | Completed | Status |
 |-------|-------|-------|-----------|--------|
 | 1 | Zod Schemas Foundation | 3 | 3 | ✅ Complete |
-| 2 | Service Schemas | 3 | 0 | ⬜ Not Started |
+| 2 | Service Schemas | 3 | 3 | ✅ Complete |
 | 3 | Handler Validation Migration | 4 | 0 | ⬜ Not Started |
 | 4 | OpenAPI Spec Generation | 5 | 0 | ⬜ Not Started |
 | 5 | Swagger UI Gateway | 2 | 0 | ⬜ Not Started |

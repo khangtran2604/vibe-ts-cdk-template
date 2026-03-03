@@ -38,4 +38,4 @@ Create the templated Zod schema file for the module generator. This uses `{{Enti
 Medium -- Template variable substitution adds complexity on top of the schema pattern
 
 ## Status
-- [ ] Not Started
+- [x] Complete

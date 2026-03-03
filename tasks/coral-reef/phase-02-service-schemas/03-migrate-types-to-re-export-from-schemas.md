@@ -34,4 +34,4 @@ Replace the manual TypeScript interface definitions in both the users service an
 Low -- Simple file replacement, but must verify no other types are lost
 
 ## Status
-- [ ] Not Started
+- [x] Complete
