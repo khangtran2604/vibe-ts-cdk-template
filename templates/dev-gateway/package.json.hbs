@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/gateway.ts"
+    "dev": "tsx watch --exclude '**/node_modules/**' src/gateway.ts"
   },
   "devDependencies": {
     "@{{projectName}}/tsconfig": "workspace:*",

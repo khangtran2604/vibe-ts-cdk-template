@@ -29,7 +29,7 @@ Resolve these first:
 
 Run via Bash:
 ```bash
-lsof -ti:3000,3001,3002,5173 | xargs kill -9 2>/dev/null || true
+lsof -ti:3000,3001,3002,3003,5173 | xargs kill -9 2>/dev/null || true
 ```
 This ensures no leftover dev servers from prior runs block us.
 
@@ -63,7 +63,7 @@ cd {PROJECT_DIR} && pnpm install && pnpm build
 
 **IMPORTANT**: `pnpm build` is required before `pnpm dev` because the turbo `dev` pipeline has no `dependsOn: ["^build"]` — shared packages won't be compiled otherwise.
 
-If build fails, this is likely a template bug. Jump to STEP 10 (diagnosis).
+If build fails, this is likely a template bug. Jump to STEP 14 (diagnosis).
 
 ### STEP 6: Start Dev Servers
 
@@ -125,13 +125,13 @@ Check these paths exist in PROJECT_DIR:
 | 9 | `packages/database-client/` | Database client package |
 | 10 | `.github/workflows/` | CI/CD workflows |
 
-### STEP 9: Report Results
+### STEP 9: Report Scaffold Results
 
 Format results as a verification table:
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Verification Results: {PRESET} preset
+  Scaffold Verification Results: {PRESET} preset
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   # │ Test                    │ Status │ Details
@@ -150,49 +150,164 @@ Format results as a verification table:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-If ALL tests pass, jump to STEP 13 (cleanup).
+If ALL scaffold tests pass, proceed to STEP 10 (Module Verification).
+If any scaffold test FAILS, jump to STEP 14 (diagnosis).
 
-### STEP 10: Diagnose Failures (on any FAIL)
+### STEP 10: Generate Module
+
+Run:
+```bash
+cd {PROJECT_DIR} && node {CLI_DIR}/dist/index.js module orders -y --no-install
+```
+
+Verify exit code 0. On failure, jump to STEP 14 (diagnosis).
+
+### STEP 11: Rebuild After Module Generation
+
+Run:
+```bash
+cd {PROJECT_DIR} && pnpm install && pnpm build
+```
+
+On failure, jump to STEP 14 (diagnosis).
+
+### STEP 12: Restart Dev Servers
+
+1. Kill all ports:
+   ```bash
+   lsof -ti:3000,3001,3002,3003,5173 | xargs kill -9 2>/dev/null || true
+   ```
+2. Start `pnpm dev` in background:
+   ```bash
+   cd {PROJECT_DIR} && pnpm dev > /tmp/verify-dev-{PRESET}-module.log 2>&1
+   ```
+   Use `run_in_background: true`.
+3. Poll ports for readiness (timeout 30 seconds, poll every 2 seconds):
+   - **Port 3001** (health): `curl -sf http://localhost:3001/health`
+   - **Port 3002** (users): `curl -sf http://localhost:3002/users`
+   - **Port 3003** (orders): `curl -sf http://localhost:3003/orders`
+   - **Port 3000** (gateway): `curl -sf http://localhost:3000/health`
+   - **Port 5173** (Vite frontend, standard+ only): `curl -sf http://localhost:5173/`
+
+### STEP 13: Verify Module
+
+Run all module verification checks and collect results.
+
+#### 13a. Structure Checks
+
+Verify these files/directories exist in PROJECT_DIR and contain expected content:
+
+| # | Check | Description |
+|---|-------|-------------|
+| M1 | `services/orders/` exists | Module directory created |
+| M2 | `services/orders/src/handlers/create.ts` exists | Handler files generated |
+| M3 | `services/orders/src/handlers/list.ts` exists | Handler files generated |
+| M4 | `infra/src/stacks/modules/orders-stack.ts` exists | CDK stack generated |
+| M5 | `infra/src/index.ts` contains `import { OrdersStack }` | Import injected |
+| M6 | `infra/src/index.ts` contains `new OrdersStack(` | Instance injected |
+| M7 | `dev-gateway/src/gateway.ts` contains `"/orders"` | Gateway route injected |
+
+#### 13b. API Tests via Gateway (port 3000)
+
+| # | Method | URL | Body | Expected Status | Expected Body Contains |
+|---|--------|-----|------|----------------|----------------------|
+| M8 | GET | `http://localhost:3000/orders` | — | 200 | `"items"` |
+| M9 | POST | `http://localhost:3000/orders` | `{"name":"Test Order"}` | 201 | `"id"` |
+| M10 | GET | `http://localhost:3000/orders/{id}` | — | 200 | `"Test Order"` |
+| M11 | GET | `http://localhost:3000/orders` | — | 200 | `"items"` with 1 entry |
+| M12 | POST | `http://localhost:3000/orders` | `{}` | 400 | `"error"` |
+
+For test M9, capture the returned `id` from the response body to use in test M10.
+
+#### 13c. Regression Tests (existing services still work)
+
+| # | Method | URL | Expected Status | Description |
+|---|--------|-----|----------------|-------------|
+| M13 | GET | `http://localhost:3000/health` | 200 | Health unbroken |
+| M14 | GET | `http://localhost:3000/users` | 200 | Users unbroken |
+
+#### 13d. Report Module Results
+
+Format results as a second verification table:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Module Verification Results: {PRESET} preset
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  #   │ Test                       │ Status │ Details
+ ─────┼────────────────────────────┼────────┼──────────
+  M1  │ services/orders/ exists    │ PASS   │ directory
+  M2  │ create.ts exists           │ PASS   │ file
+  M3  │ list.ts exists             │ PASS   │ file
+  M4  │ orders-stack.ts exists     │ PASS   │ file
+  M5  │ OrdersStack import         │ PASS   │ injected
+  M6  │ OrdersStack instance       │ PASS   │ injected
+  M7  │ Gateway /orders route      │ PASS   │ injected
+  M8  │ GET /orders                │ PASS   │ 200
+  M9  │ POST /orders               │ PASS   │ 201, created
+  M10 │ GET /orders/:id            │ PASS   │ 200
+  M11 │ GET /orders (with data)    │ PASS   │ 200, 1 item
+  M12 │ POST /orders (invalid)     │ PASS   │ 400
+  M13 │ GET /health (regression)   │ PASS   │ 200
+  M14 │ GET /users (regression)    │ PASS   │ 200
+
+  Result: 14/14 passed
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+If ALL module tests pass, jump to STEP 17 (cleanup).
+If any module test FAILS, jump to STEP 14 (diagnosis).
+
+### STEP 14: Diagnose Failures (on any FAIL)
 
 When any test fails, use the **Agent tool** with `subagent_type: "js-debugger"` to diagnose:
 
 Provide the agent with:
 - Which tests failed and the actual vs expected responses
-- The dev server log: `/tmp/verify-dev-{PRESET}.log`
+- The dev server log: `/tmp/verify-dev-{PRESET}.log` and `/tmp/verify-dev-{PRESET}-module.log` (if module step was reached)
 - Relevant template source files to read:
   - `templates/dev-gateway/src/gateway.ts` — gateway routing
   - `templates/services/health/src/handler.ts` — health handler
   - `templates/services/users/src/handler.ts` — users handler
   - `templates/services/users/src/dev-server.ts` — users dev server
   - `templates/services/health/src/dev-server.ts` — health dev server
+  - `templates/generators/module/src/app.ts.hbs` — module app template
+  - `templates/generators/module/src/handlers/create.ts.hbs` — module create handler
+  - `templates/generators/module/src/handlers/list.ts.hbs` — module list handler
+  - `templates/generators/module/src/handlers/get.ts.hbs` — module get handler
+  - `templates/generators/module/src/dev-server.ts.hbs` — module dev server
+  - `templates/generators/infra-stack/stack.ts.hbs` — module CDK stack
+  - `src/module-generator.ts` — module generation engine
+  - `src/module-helpers.ts` — module string transforms and injection helpers
 - The generated project dir for comparison: `{PROJECT_DIR}`
 
 Ask the agent to identify the root cause and which **template files** (not generated files) need to be fixed.
 
-### STEP 11: Fix Issues
+### STEP 15: Fix Issues
 
 Use the **Agent tool** with `subagent_type: "nodejs-performance-security"` to implement fixes:
 
 Provide:
-- The diagnosis report from Step 10
+- The diagnosis report from Step 14
 - The specific template files to fix (paths in CLI_DIR, under `templates/` or `src/`)
 
 **CRITICAL CONSTRAINTS:**
 - NEVER edit files in the generated project (`{PROJECT_DIR}`). All fixes go to `templates/` or `src/` in CLI_DIR.
 - The agent must edit the actual template files, not just suggest changes.
 
-### STEP 12: Re-verify (Loop)
+### STEP 16: Re-verify (Loop)
 
 After fixes are applied:
 1. Go back to **STEP 2** (kill ports, rebuild CLI, regenerate, re-test)
 2. Maximum **3 retry cycles**. If issues persist after 3 cycles, report all remaining failures and stop.
 3. Track which cycle you're on: `Retry cycle {N}/3`
 
-### STEP 13: Cleanup
+### STEP 17: Cleanup
 
 1. Kill dev servers:
    ```bash
-   lsof -ti:3000,3001,3002,5173 | xargs kill -9 2>/dev/null || true
+   lsof -ti:3000,3001,3002,3003,5173 | xargs kill -9 2>/dev/null || true
    ```
 2. Report final status:
    - If all passed: `Verification PASSED for {PRESET} preset`
@@ -208,6 +323,6 @@ Do NOT remove the generated project directory — the user may want to inspect i
 2. **Always rebuild CLI** (`pnpm build` in CLI_DIR) after any template/source fix
 3. **Always `pnpm build` in generated project** before `pnpm dev` (turbo dev pipeline has no `dependsOn: ["^build"]`)
 4. **Always kill stale ports** before starting dev servers
-5. **Service ports**: health=3001, users=3002, gateway=3000, Vite=5173
-6. **Gateway routes**: `/health/*` → localhost:3001, `/users/*` → localhost:3002
+5. **Service ports**: health=3001, users=3002, orders=3003, gateway=3000, Vite=5173
+6. **Gateway routes**: `/health/*` → localhost:3001, `/users/*` → localhost:3002, `/orders/*` → localhost:3003
 7. **Max 3 fix cycles** — don't loop forever

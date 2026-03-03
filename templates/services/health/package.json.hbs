@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/handlers/health.js",
   "scripts": {
-    "dev": "tsx watch src/dev-server.ts",
+    "dev": "tsx watch --exclude '**/node_modules/**' src/dev-server.ts",
     "build": "tsc --build",
     "test": "vitest run",
     "lint": "eslint src"
