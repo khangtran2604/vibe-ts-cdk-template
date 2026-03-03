@@ -56,6 +56,21 @@ export interface ProjectConfig {
 }
 
 /**
+ * Controls which CRUD endpoints require authentication via the Cognito
+ * authorizer.  Each boolean flag maps to one API Gateway method.
+ *
+ * When all flags are `false` the module behaves exactly like an unprotected
+ * module — no authorizer resources are created.
+ */
+export interface ProtectedEndpoints {
+  list: boolean;
+  get: boolean;
+  create: boolean;
+  update: boolean;
+  delete: boolean;
+}
+
+/**
  * Configuration for generating a new CRUD service module inside an existing
  * scaffolded project.  Produced by the module prompts and consumed by the
  * module generator engine.
@@ -73,4 +88,6 @@ export interface ModuleConfig {
   projectName: string;
   /** Whether to run pnpm install after generation */
   installDeps: boolean;
+  /** Per-endpoint auth protection config; absent means fully unprotected */
+  protectedEndpoints?: ProtectedEndpoints;
 }

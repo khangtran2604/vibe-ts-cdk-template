@@ -32,6 +32,7 @@ import {
   detectProjectContext,
   readProjectName,
   scanNextPort,
+  detectAuthSupport,
 } from "../src/module-context.js";
 
 // ---------------------------------------------------------------------------
@@ -521,6 +522,88 @@ describe("scanNextPort", () => {
       // Only 'health' is a directory; README.md should not generate a readFile call for dev-server.ts.
       expect(mockReadFile).toHaveBeenCalledTimes(1);
       expect(port).toBe(3002);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectAuthSupport
+// ---------------------------------------------------------------------------
+
+describe("detectAuthSupport", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // -------------------------------------------------------------------------
+  // auth/ directory exists — standard+ preset
+  // -------------------------------------------------------------------------
+  describe("auth/ directory exists", () => {
+    it("should return true when auth/ exists in the project root", async () => {
+      mockPathExists.mockResolvedValue(true);
+      const result = await detectAuthSupport("/home/user/my-app");
+      expect(result).toBe(true);
+    });
+
+    it("should call pathExists with the auth/ path inside projectDir", async () => {
+      mockPathExists.mockResolvedValue(true);
+      await detectAuthSupport("/home/user/my-app");
+      expect(mockPathExists).toHaveBeenCalledWith(
+        expect.stringContaining("auth")
+      );
+    });
+
+    it("should include the projectDir in the path passed to pathExists", async () => {
+      mockPathExists.mockResolvedValue(true);
+      await detectAuthSupport("/home/user/my-app");
+      const [[pathArg]] = mockPathExists.mock.calls as [[string]];
+      expect(pathArg).toContain("my-app");
+    });
+
+    it("should call pathExists exactly once", async () => {
+      mockPathExists.mockResolvedValue(true);
+      await detectAuthSupport("/home/user/my-app");
+      expect(mockPathExists).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // auth/ directory does not exist — minimal preset
+  // -------------------------------------------------------------------------
+  describe("auth/ directory does not exist", () => {
+    it("should return false when auth/ does not exist in the project root", async () => {
+      mockPathExists.mockResolvedValue(false);
+      const result = await detectAuthSupport("/home/user/my-app");
+      expect(result).toBe(false);
+    });
+
+    it("should still call pathExists with the auth/ path even when the directory is absent", async () => {
+      mockPathExists.mockResolvedValue(false);
+      await detectAuthSupport("/home/user/my-app");
+      expect(mockPathExists).toHaveBeenCalledWith(
+        expect.stringContaining("auth")
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Correct path construction
+  // -------------------------------------------------------------------------
+  describe("path construction", () => {
+    it("should join projectDir and 'auth' into the checked path", async () => {
+      mockPathExists.mockResolvedValue(false);
+      await detectAuthSupport("/home/user/my-project");
+      const [[pathArg]] = mockPathExists.mock.calls as [[string]];
+      // The resulting path must contain both the project dir segment and 'auth'.
+      expect(pathArg).toContain("my-project");
+      expect(pathArg).toContain("auth");
+    });
+
+    it("should work with a trailing-slash-free projectDir", async () => {
+      mockPathExists.mockResolvedValue(true);
+      await detectAuthSupport("/projects/app");
+      const [[pathArg]] = mockPathExists.mock.calls as [[string]];
+      expect(pathArg).toMatch(/app.*auth|auth/);
     });
   });
 });

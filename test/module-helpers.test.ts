@@ -298,8 +298,32 @@ describe("getModuleVariableMap", () => {
       expect(getModuleVariableMap(makeModuleConfig())).toHaveProperty("projectName");
     });
 
-    it("should return exactly 8 keys", () => {
-      expect(Object.keys(getModuleVariableMap(makeModuleConfig()))).toHaveLength(8);
+    it("should return exactly 14 keys", () => {
+      expect(Object.keys(getModuleVariableMap(makeModuleConfig()))).toHaveLength(14);
+    });
+
+    it("should include 'authorizerSetup' in the returned map", () => {
+      expect(getModuleVariableMap(makeModuleConfig())).toHaveProperty("authorizerSetup");
+    });
+
+    it("should include 'listAuthOptions' in the returned map", () => {
+      expect(getModuleVariableMap(makeModuleConfig())).toHaveProperty("listAuthOptions");
+    });
+
+    it("should include 'getAuthOptions' in the returned map", () => {
+      expect(getModuleVariableMap(makeModuleConfig())).toHaveProperty("getAuthOptions");
+    });
+
+    it("should include 'createAuthOptions' in the returned map", () => {
+      expect(getModuleVariableMap(makeModuleConfig())).toHaveProperty("createAuthOptions");
+    });
+
+    it("should include 'updateAuthOptions' in the returned map", () => {
+      expect(getModuleVariableMap(makeModuleConfig())).toHaveProperty("updateAuthOptions");
+    });
+
+    it("should include 'deleteAuthOptions' in the returned map", () => {
+      expect(getModuleVariableMap(makeModuleConfig())).toHaveProperty("deleteAuthOptions");
     });
   });
 
@@ -397,6 +421,186 @@ describe("getModuleVariableMap", () => {
       const map = getModuleVariableMap(config);
       (map as Record<string, string>)["injected"] = "value";
       expect(getModuleVariableMap(config)).not.toHaveProperty("injected");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Auth variables — protectedEndpoints is absent (fully unprotected module)
+  // -------------------------------------------------------------------------
+
+  describe("auth variables when protectedEndpoints is undefined", () => {
+    it("should set authorizerSetup to an empty string when protectedEndpoints is absent", () => {
+      const map = getModuleVariableMap(makeModuleConfig());
+      expect(map.authorizerSetup).toBe("");
+    });
+
+    it("should set listAuthOptions to an empty string when protectedEndpoints is absent", () => {
+      const map = getModuleVariableMap(makeModuleConfig());
+      expect(map.listAuthOptions).toBe("");
+    });
+
+    it("should set getAuthOptions to an empty string when protectedEndpoints is absent", () => {
+      const map = getModuleVariableMap(makeModuleConfig());
+      expect(map.getAuthOptions).toBe("");
+    });
+
+    it("should set createAuthOptions to an empty string when protectedEndpoints is absent", () => {
+      const map = getModuleVariableMap(makeModuleConfig());
+      expect(map.createAuthOptions).toBe("");
+    });
+
+    it("should set updateAuthOptions to an empty string when protectedEndpoints is absent", () => {
+      const map = getModuleVariableMap(makeModuleConfig());
+      expect(map.updateAuthOptions).toBe("");
+    });
+
+    it("should set deleteAuthOptions to an empty string when protectedEndpoints is absent", () => {
+      const map = getModuleVariableMap(makeModuleConfig());
+      expect(map.deleteAuthOptions).toBe("");
+    });
+  });
+
+  describe("auth variables when all protectedEndpoints flags are false", () => {
+    const config = makeModuleConfig({
+      protectedEndpoints: { list: false, get: false, create: false, update: false, delete: false },
+    });
+
+    it("should set authorizerSetup to an empty string when all endpoints are unprotected", () => {
+      expect(getModuleVariableMap(config).authorizerSetup).toBe("");
+    });
+
+    it("should set all per-method auth options to empty strings when all flags are false", () => {
+      const map = getModuleVariableMap(config);
+      expect(map.listAuthOptions).toBe("");
+      expect(map.getAuthOptions).toBe("");
+      expect(map.createAuthOptions).toBe("");
+      expect(map.updateAuthOptions).toBe("");
+      expect(map.deleteAuthOptions).toBe("");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Auth variables — some endpoints are protected
+  // -------------------------------------------------------------------------
+
+  describe("auth variables when some endpoints are protected", () => {
+    const config = makeModuleConfig({
+      protectedEndpoints: { list: false, get: false, create: true, update: true, delete: true },
+    });
+
+    it("should produce a non-empty authorizerSetup when at least one endpoint is protected", () => {
+      expect(getModuleVariableMap(config).authorizerSetup).not.toBe("");
+    });
+
+    it("should set listAuthOptions to empty string for an unprotected list endpoint", () => {
+      expect(getModuleVariableMap(config).listAuthOptions).toBe("");
+    });
+
+    it("should set getAuthOptions to empty string for an unprotected get endpoint", () => {
+      expect(getModuleVariableMap(config).getAuthOptions).toBe("");
+    });
+
+    it("should set createAuthOptions to a non-empty string for a protected create endpoint", () => {
+      expect(getModuleVariableMap(config).createAuthOptions).not.toBe("");
+    });
+
+    it("should set updateAuthOptions to a non-empty string for a protected update endpoint", () => {
+      expect(getModuleVariableMap(config).updateAuthOptions).not.toBe("");
+    });
+
+    it("should set deleteAuthOptions to a non-empty string for a protected delete endpoint", () => {
+      expect(getModuleVariableMap(config).deleteAuthOptions).not.toBe("");
+    });
+
+    it("should produce the same auth options string for every protected method", () => {
+      const map = getModuleVariableMap(config);
+      // All three protected methods receive the same CDK options snippet.
+      expect(map.createAuthOptions).toBe(map.updateAuthOptions);
+      expect(map.updateAuthOptions).toBe(map.deleteAuthOptions);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Auth variables — all endpoints are protected
+  // -------------------------------------------------------------------------
+
+  describe("auth variables when all endpoints are protected", () => {
+    const config = makeModuleConfig({
+      protectedEndpoints: { list: true, get: true, create: true, update: true, delete: true },
+    });
+
+    it("should produce a non-empty authorizerSetup when all endpoints are protected", () => {
+      expect(getModuleVariableMap(config).authorizerSetup).not.toBe("");
+    });
+
+    it("should produce non-empty auth options for every method when all are protected", () => {
+      const map = getModuleVariableMap(config);
+      expect(map.listAuthOptions).not.toBe("");
+      expect(map.getAuthOptions).not.toBe("");
+      expect(map.createAuthOptions).not.toBe("");
+      expect(map.updateAuthOptions).not.toBe("");
+      expect(map.deleteAuthOptions).not.toBe("");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // authorizerSetup content — expected CDK constructs
+  // -------------------------------------------------------------------------
+
+  describe("authorizerSetup content", () => {
+    const config = makeModuleConfig({
+      protectedEndpoints: { list: true, get: false, create: false, update: false, delete: false },
+    });
+
+    it("should contain 'TokenAuthorizer' in authorizerSetup", () => {
+      expect(getModuleVariableMap(config).authorizerSetup).toContain("TokenAuthorizer");
+    });
+
+    it("should contain 'importValue' in authorizerSetup", () => {
+      expect(getModuleVariableMap(config).authorizerSetup).toContain("importValue");
+    });
+
+    it("should contain the {{projectName}} placeholder in authorizerSetup", () => {
+      expect(getModuleVariableMap(config).authorizerSetup).toContain("{{projectName}}");
+    });
+
+    it("should contain the {{ModuleName}} placeholder in authorizerSetup", () => {
+      expect(getModuleVariableMap(config).authorizerSetup).toContain("{{ModuleName}}");
+    });
+
+    it("should contain 'identitySource' in authorizerSetup", () => {
+      expect(getModuleVariableMap(config).authorizerSetup).toContain("identitySource");
+    });
+
+    it("should reference the Authorization header in authorizerSetup", () => {
+      expect(getModuleVariableMap(config).authorizerSetup).toContain("Authorization");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Per-method auth options content
+  // -------------------------------------------------------------------------
+
+  describe("per-method auth options content", () => {
+    const config = makeModuleConfig({
+      protectedEndpoints: { list: true, get: false, create: false, update: false, delete: false },
+    });
+
+    it("should include 'authorizer' reference in a protected method's options string", () => {
+      expect(getModuleVariableMap(config).listAuthOptions).toContain("authorizer");
+    });
+
+    it("should include 'authorizationType' in a protected method's options string", () => {
+      expect(getModuleVariableMap(config).listAuthOptions).toContain("authorizationType");
+    });
+
+    it("should reference CUSTOM authorization type in a protected method's options string", () => {
+      expect(getModuleVariableMap(config).listAuthOptions).toContain("CUSTOM");
+    });
+
+    it("should start the options string with a leading comma to fit inside addMethod() call", () => {
+      // The snippet is appended directly inside a method call, so it must begin with ', {'
+      expect(getModuleVariableMap(config).listAuthOptions.trimStart()).toMatch(/^,/);
     });
   });
 });

@@ -1,4 +1,4 @@
-import type { ModuleConfig } from "./types.js";
+import type { ModuleConfig, ProtectedEndpoints } from "./types.js";
 
 /**
  * Converts a kebab-case string to PascalCase.
@@ -106,6 +106,9 @@ export function toFlatLower(kebab: string): string {
  * // }
  */
 export function getModuleVariableMap(config: ModuleConfig): Record<string, string> {
+  const pe = config.protectedEndpoints;
+  const hasAnyProtected = pe != null && Object.values(pe).some(Boolean);
+
   return {
     moduleName: config.moduleName,
     ModuleName: toPascalCase(config.moduleName),
@@ -115,7 +118,47 @@ export function getModuleVariableMap(config: ModuleConfig): Record<string, strin
     flatLower: toFlatLower(config.moduleName),
     port: String(config.port),
     projectName: config.projectName,
+    authorizerSetup: hasAnyProtected ? buildAuthorizerSetup() : "",
+    listAuthOptions: authMethodOptions(pe?.list),
+    getAuthOptions: authMethodOptions(pe?.get),
+    createAuthOptions: authMethodOptions(pe?.create),
+    updateAuthOptions: authMethodOptions(pe?.update),
+    deleteAuthOptions: authMethodOptions(pe?.delete),
   };
+}
+
+/**
+ * Returns the CDK method-options snippet that attaches a token authorizer to
+ * an API Gateway method.  When the endpoint is not protected, returns an
+ * empty string so the `addMethod` call remains unchanged.
+ */
+function authMethodOptions(isProtected?: boolean): string {
+  if (!isProtected) return "";
+  return `, {\n      authorizer,\n      authorizationType: apigateway.AuthorizationType.CUSTOM,\n    }`;
+}
+
+/**
+ * Returns the CDK block that imports the Cognito authorizer Lambda from the
+ * AuthStack via `CfnOutput` and creates a `TokenAuthorizer`.
+ *
+ * The returned string intentionally contains `{{projectName}}` and
+ * `{{ModuleName}}` placeholders — they are resolved in the same `replaceAll`
+ * pass that processes all other template variables.
+ */
+function buildAuthorizerSetup(): string {
+  return [
+    "",
+    "    const authorizerFnArn = cdk.Fn.importValue(",
+    '      `{{projectName}}-AuthorizerFunctionArn-${this.stage}`',
+    "    );",
+    "    const authorizerFn = lambda.Function.fromFunctionArn(",
+    '      this, "ImportedAuthorizerFunction", authorizerFnArn',
+    "    );",
+    '    const authorizer = new apigateway.TokenAuthorizer(this, "{{ModuleName}}Authorizer", {',
+    "      handler: authorizerFn,",
+    '      identitySource: "method.request.header.Authorization",',
+    "    });",
+  ].join("\n");
 }
 
 /**

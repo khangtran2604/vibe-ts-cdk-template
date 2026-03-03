@@ -212,3 +212,18 @@ export async function scanNextPort(projectDir: string): Promise<number> {
 
   return Math.max(...ports) + 1;
 }
+
+/**
+ * Checks whether the scaffolded project has an `auth/` directory, indicating
+ * it was created with a standard+ preset that includes Cognito auth
+ * infrastructure.
+ *
+ * Used to validate that the `--protected` flag is only available for projects
+ * that actually have an authorizer Lambda deployed.
+ *
+ * @param projectDir - Absolute path to the project root.
+ * @returns `true` when `auth/` exists in the project root, `false` otherwise.
+ */
+export async function detectAuthSupport(projectDir: string): Promise<boolean> {
+  return pathExists(join(projectDir, "auth"));
+}
