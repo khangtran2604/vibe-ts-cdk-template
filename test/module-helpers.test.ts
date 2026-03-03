@@ -298,8 +298,8 @@ describe("getModuleVariableMap", () => {
       expect(getModuleVariableMap(makeModuleConfig())).toHaveProperty("projectName");
     });
 
-    it("should return exactly 14 keys", () => {
-      expect(Object.keys(getModuleVariableMap(makeModuleConfig()))).toHaveLength(14);
+    it("should return exactly 21 keys", () => {
+      expect(Object.keys(getModuleVariableMap(makeModuleConfig()))).toHaveLength(21);
     });
 
     it("should include 'authorizerSetup' in the returned map", () => {
@@ -601,6 +601,283 @@ describe("getModuleVariableMap", () => {
     it("should start the options string with a leading comma to fit inside addMethod() call", () => {
       // The snippet is appended directly inside a method call, so it must begin with ', {'
       expect(getModuleVariableMap(config).listAuthOptions.trimStart()).toMatch(/^,/);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // localAuth middleware variables — Phase 2 of silver-gate
+  // -------------------------------------------------------------------------
+
+  describe("localAuth middleware variables", () => {
+    // -----------------------------------------------------------------------
+    // 1. All unprotected — no protectedEndpoints in config
+    // -----------------------------------------------------------------------
+
+    describe("when protectedEndpoints is absent (all unprotected)", () => {
+      const map = getModuleVariableMap(makeModuleConfig());
+
+      it("should set localAuthImport to an empty string", () => {
+        expect(map.localAuthImport).toBe("");
+      });
+
+      it("should set localAuthConst to an empty string", () => {
+        expect(map.localAuthConst).toBe("");
+      });
+
+      it("should set createAuthMiddleware to an empty string", () => {
+        expect(map.createAuthMiddleware).toBe("");
+      });
+
+      it("should set getAuthMiddleware to an empty string", () => {
+        expect(map.getAuthMiddleware).toBe("");
+      });
+
+      it("should set listAuthMiddleware to an empty string", () => {
+        expect(map.listAuthMiddleware).toBe("");
+      });
+
+      it("should set updateAuthMiddleware to an empty string", () => {
+        expect(map.updateAuthMiddleware).toBe("");
+      });
+
+      it("should set deleteAuthMiddleware to an empty string", () => {
+        expect(map.deleteAuthMiddleware).toBe("");
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // 2. All protected — every endpoint flag is true
+    // -----------------------------------------------------------------------
+
+    describe("when all protectedEndpoints flags are true", () => {
+      const config = makeModuleConfig({
+        protectedEndpoints: { list: true, get: true, create: true, update: true, delete: true },
+      });
+      const map = getModuleVariableMap(config);
+
+      it("should set localAuthImport to the import statement containing {{projectName}}", () => {
+        expect(map.localAuthImport).toContain("{{projectName}}");
+      });
+
+      it("should set localAuthImport to include the localAuth named import", () => {
+        expect(map.localAuthImport).toContain("localAuth");
+      });
+
+      it("should set localAuthImport to include the lambda-utils package reference", () => {
+        expect(map.localAuthImport).toContain("lambda-utils");
+      });
+
+      it("should set localAuthConst to the auth constant assignment", () => {
+        expect(map.localAuthConst).toContain("const auth = localAuth();");
+      });
+
+      it("should set createAuthMiddleware to 'auth, '", () => {
+        expect(map.createAuthMiddleware).toBe("auth, ");
+      });
+
+      it("should set getAuthMiddleware to 'auth, '", () => {
+        expect(map.getAuthMiddleware).toBe("auth, ");
+      });
+
+      it("should set listAuthMiddleware to 'auth, '", () => {
+        expect(map.listAuthMiddleware).toBe("auth, ");
+      });
+
+      it("should set updateAuthMiddleware to 'auth, '", () => {
+        expect(map.updateAuthMiddleware).toBe("auth, ");
+      });
+
+      it("should set deleteAuthMiddleware to 'auth, '", () => {
+        expect(map.deleteAuthMiddleware).toBe("auth, ");
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // 3. Partial protection — only create and delete are protected
+    // -----------------------------------------------------------------------
+
+    describe("when only create and delete endpoints are protected", () => {
+      const config = makeModuleConfig({
+        protectedEndpoints: { list: false, get: false, create: true, update: false, delete: true },
+      });
+      const map = getModuleVariableMap(config);
+
+      it("should set createAuthMiddleware to 'auth, ' for a protected create endpoint", () => {
+        expect(map.createAuthMiddleware).toBe("auth, ");
+      });
+
+      it("should set deleteAuthMiddleware to 'auth, ' for a protected delete endpoint", () => {
+        expect(map.deleteAuthMiddleware).toBe("auth, ");
+      });
+
+      it("should set listAuthMiddleware to '' for an unprotected list endpoint", () => {
+        expect(map.listAuthMiddleware).toBe("");
+      });
+
+      it("should set getAuthMiddleware to '' for an unprotected get endpoint", () => {
+        expect(map.getAuthMiddleware).toBe("");
+      });
+
+      it("should set updateAuthMiddleware to '' for an unprotected update endpoint", () => {
+        expect(map.updateAuthMiddleware).toBe("");
+      });
+
+      it("should still populate localAuthImport when at least one endpoint is protected", () => {
+        expect(map.localAuthImport).not.toBe("");
+      });
+
+      it("should still populate localAuthConst when at least one endpoint is protected", () => {
+        expect(map.localAuthConst).not.toBe("");
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // 4. Single endpoint protected — only list
+    // -----------------------------------------------------------------------
+
+    describe("when only the list endpoint is protected", () => {
+      const config = makeModuleConfig({
+        protectedEndpoints: { list: true, get: false, create: false, update: false, delete: false },
+      });
+      const map = getModuleVariableMap(config);
+
+      it("should populate localAuthImport when only list is protected", () => {
+        expect(map.localAuthImport).not.toBe("");
+      });
+
+      it("should populate localAuthConst when only list is protected", () => {
+        expect(map.localAuthConst).not.toBe("");
+      });
+
+      it("should set listAuthMiddleware to 'auth, ' for the protected list endpoint", () => {
+        expect(map.listAuthMiddleware).toBe("auth, ");
+      });
+
+      it("should set getAuthMiddleware to '' when get is not protected", () => {
+        expect(map.getAuthMiddleware).toBe("");
+      });
+
+      it("should set createAuthMiddleware to '' when create is not protected", () => {
+        expect(map.createAuthMiddleware).toBe("");
+      });
+
+      it("should set updateAuthMiddleware to '' when update is not protected", () => {
+        expect(map.updateAuthMiddleware).toBe("");
+      });
+
+      it("should set deleteAuthMiddleware to '' when delete is not protected", () => {
+        expect(map.deleteAuthMiddleware).toBe("");
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // 5. Variable ordering — localAuthImport appears before projectName
+    // -----------------------------------------------------------------------
+
+    describe("variable key ordering", () => {
+      it("should place localAuthImport before projectName in Object.keys()", () => {
+        const keys = Object.keys(getModuleVariableMap(makeModuleConfig()));
+        const localAuthImportIdx = keys.indexOf("localAuthImport");
+        const projectNameIdx = keys.indexOf("projectName");
+        expect(localAuthImportIdx).toBeGreaterThanOrEqual(0);
+        expect(projectNameIdx).toBeGreaterThanOrEqual(0);
+        expect(localAuthImportIdx).toBeLessThan(projectNameIdx);
+      });
+
+      it("should place localAuthConst before projectName in Object.keys()", () => {
+        const keys = Object.keys(getModuleVariableMap(makeModuleConfig()));
+        const localAuthConstIdx = keys.indexOf("localAuthConst");
+        const projectNameIdx = keys.indexOf("projectName");
+        expect(localAuthConstIdx).toBeLessThan(projectNameIdx);
+      });
+
+      it("should include all 7 new auth middleware keys in the returned map", () => {
+        const map = getModuleVariableMap(makeModuleConfig());
+        expect(map).toHaveProperty("localAuthImport");
+        expect(map).toHaveProperty("localAuthConst");
+        expect(map).toHaveProperty("createAuthMiddleware");
+        expect(map).toHaveProperty("getAuthMiddleware");
+        expect(map).toHaveProperty("listAuthMiddleware");
+        expect(map).toHaveProperty("updateAuthMiddleware");
+        expect(map).toHaveProperty("deleteAuthMiddleware");
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // localAuthImport content — exact shape
+    // -----------------------------------------------------------------------
+
+    describe("localAuthImport content when any endpoint is protected", () => {
+      const config = makeModuleConfig({
+        protectedEndpoints: { list: false, get: false, create: true, update: false, delete: false },
+      });
+      const map = getModuleVariableMap(config);
+
+      it("should begin with a newline so it appends cleanly to surrounding imports", () => {
+        expect(map.localAuthImport.startsWith("\n")).toBe(true);
+      });
+
+      it("should use a named import of localAuth", () => {
+        expect(map.localAuthImport).toContain("{ localAuth }");
+      });
+
+      it("should import from the scoped lambda-utils package using @{{projectName}} scope", () => {
+        expect(map.localAuthImport).toContain("@{{projectName}}/lambda-utils");
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // localAuthConst content — exact shape
+    // -----------------------------------------------------------------------
+
+    describe("localAuthConst content when any endpoint is protected", () => {
+      const config = makeModuleConfig({
+        protectedEndpoints: { list: false, get: true, create: false, update: false, delete: false },
+      });
+      const map = getModuleVariableMap(config);
+
+      it("should begin with a newline", () => {
+        expect(map.localAuthConst.startsWith("\n")).toBe(true);
+      });
+
+      it("should call localAuth() with no arguments", () => {
+        expect(map.localAuthConst).toContain("localAuth()");
+      });
+
+      it("should assign the result to a const named auth", () => {
+        expect(map.localAuthConst).toContain("const auth");
+      });
+
+      it("should not end with a trailing newline", () => {
+        expect(map.localAuthConst.endsWith("\n")).toBe(false);
+      });
+    });
+
+    // -----------------------------------------------------------------------
+    // All-false protectedEndpoints — same as absent
+    // -----------------------------------------------------------------------
+
+    describe("when all protectedEndpoints flags are explicitly false", () => {
+      const config = makeModuleConfig({
+        protectedEndpoints: { list: false, get: false, create: false, update: false, delete: false },
+      });
+      const map = getModuleVariableMap(config);
+
+      it("should set localAuthImport to '' when all flags are false", () => {
+        expect(map.localAuthImport).toBe("");
+      });
+
+      it("should set localAuthConst to '' when all flags are false", () => {
+        expect(map.localAuthConst).toBe("");
+      });
+
+      it("should set all middleware vars to '' when all flags are false", () => {
+        expect(map.createAuthMiddleware).toBe("");
+        expect(map.getAuthMiddleware).toBe("");
+        expect(map.listAuthMiddleware).toBe("");
+        expect(map.updateAuthMiddleware).toBe("");
+        expect(map.deleteAuthMiddleware).toBe("");
+      });
     });
   });
 });

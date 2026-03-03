@@ -15,14 +15,14 @@ import { handler as create{{EntityName}} } from "./handlers/create.js";
 import { handler as get{{EntityName}} } from "./handlers/get.js";
 import { handler as list{{ModuleName}} } from "./handlers/list.js";
 import { handler as update{{EntityName}} } from "./handlers/update.js";
-import { handler as delete{{EntityName}} } from "./handlers/delete.js";
+import { handler as delete{{EntityName}} } from "./handlers/delete.js";{{localAuthImport}}
 
-const app = new Hono();
+const app = new Hono();{{localAuthConst}}
 
-app.post("/{{moduleName}}", lambdaToHono(create{{EntityName}}));
-app.get("/{{moduleName}}/:id", lambdaToHono(get{{EntityName}}));
-app.get("/{{moduleName}}", lambdaToHono(list{{ModuleName}}));
-app.put("/{{moduleName}}/:id", lambdaToHono(update{{EntityName}}));
-app.delete("/{{moduleName}}/:id", lambdaToHono(delete{{EntityName}}));
+app.post("/{{moduleName}}", {{createAuthMiddleware}}lambdaToHono(create{{EntityName}}));
+app.get("/{{moduleName}}/:id", {{getAuthMiddleware}}lambdaToHono(get{{EntityName}}));
+app.get("/{{moduleName}}", {{listAuthMiddleware}}lambdaToHono(list{{ModuleName}}));
+app.put("/{{moduleName}}/:id", {{updateAuthMiddleware}}lambdaToHono(update{{EntityName}}));
+app.delete("/{{moduleName}}/:id", {{deleteAuthMiddleware}}lambdaToHono(delete{{EntityName}}));
 
 export { app };

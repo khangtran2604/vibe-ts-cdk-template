@@ -1,4 +1,4 @@
-import type { ModuleConfig, ProtectedEndpoints } from "./types.js";
+import type { ModuleConfig } from "./types.js";
 
 /**
  * Converts a kebab-case string to PascalCase.
@@ -95,14 +95,21 @@ export function toFlatLower(kebab: string): string {
  *   ...
  * })
  * // => {
- * //   moduleName:      "order-items",
- * //   ModuleName:      "OrderItems",
- * //   entityName:      "OrderItem",
- * //   EntityName:      "OrderItem",
- * //   entityNameLower: "orderItem",
- * //   flatLower:       "orderitems",
- * //   port:            "3003",
- * //   projectName:     "my-app",
+ * //   moduleName:            "order-items",
+ * //   ModuleName:            "OrderItems",
+ * //   entityName:            "OrderItem",
+ * //   EntityName:            "OrderItem",
+ * //   entityNameLower:       "orderItem",
+ * //   flatLower:             "orderitems",
+ * //   port:                  "3003",
+ * //   projectName:           "my-app",
+ * //   localAuthImport:       "\nimport { localAuth } from \"@my-app/lambda-utils\";",
+ * //   localAuthConst:        "\nconst auth = localAuth();\n",
+ * //   createAuthMiddleware:  "auth, ",   // or "" if endpoint not protected
+ * //   getAuthMiddleware:     "auth, ",
+ * //   listAuthMiddleware:    "",
+ * //   updateAuthMiddleware:  "",
+ * //   deleteAuthMiddleware:  "",
  * // }
  */
 export function getModuleVariableMap(config: ModuleConfig): Record<string, string> {
@@ -110,15 +117,26 @@ export function getModuleVariableMap(config: ModuleConfig): Record<string, strin
   const hasAnyProtected = pe != null && Object.values(pe).some(Boolean);
 
   return {
-    // authorizerSetup must come before ModuleName and projectName so that
-    // the {{ModuleName}} and {{projectName}} placeholders it embeds are
-    // resolved when replaceVariables() processes those keys later.
+    // authorizerSetup and localAuthImport must come before ModuleName and
+    // projectName so that the {{ModuleName}} / {{projectName}} placeholders
+    // they embed are resolved when replaceVariables() processes those keys
+    // later.  localAuthConst and auth middleware variables are placed here
+    // for grouping.
     authorizerSetup: hasAnyProtected ? buildAuthorizerSetup() : "",
+    localAuthImport: hasAnyProtected
+      ? '\nimport { localAuth } from "@{{projectName}}/lambda-utils";'
+      : "",
+    localAuthConst: hasAnyProtected ? "\nconst auth = localAuth();" : "",
     listAuthOptions: authMethodOptions(pe?.list),
     getAuthOptions: authMethodOptions(pe?.get),
     createAuthOptions: authMethodOptions(pe?.create),
     updateAuthOptions: authMethodOptions(pe?.update),
     deleteAuthOptions: authMethodOptions(pe?.delete),
+    createAuthMiddleware: pe?.create ? "auth, " : "",
+    getAuthMiddleware: pe?.get ? "auth, " : "",
+    listAuthMiddleware: pe?.list ? "auth, " : "",
+    updateAuthMiddleware: pe?.update ? "auth, " : "",
+    deleteAuthMiddleware: pe?.delete ? "auth, " : "",
     moduleName: config.moduleName,
     ModuleName: toPascalCase(config.moduleName),
     entityName: config.entityName,
