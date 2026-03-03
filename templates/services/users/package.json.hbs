@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch --exclude '**/node_modules/**' src/dev-server.ts",
-    "build": "tsc --build",
+    "build": "tsc --build && tsx src/generate-spec.ts",
+    "generate:openapi": "tsx src/generate-spec.ts",
     "test": "vitest run",
     "lint": "eslint src"
   },

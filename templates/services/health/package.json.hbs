@@ -6,15 +6,18 @@
   "main": "./dist/handlers/health.js",
   "scripts": {
     "dev": "tsx watch --exclude '**/node_modules/**' src/dev-server.ts",
-    "build": "tsc --build",
+    "build": "tsc --build && tsx src/generate-spec.ts",
+    "generate:openapi": "tsx src/generate-spec.ts",
     "test": "vitest run",
     "lint": "eslint src"
   },
   "dependencies": {
-    "@{{projectName}}/lambda-utils": "workspace:*"
+    "@{{projectName}}/lambda-utils": "workspace:*",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@{{projectName}}/tsconfig": "workspace:*",
+    "@asteasolutions/zod-to-openapi": "8.4.3",
     "@hono/node-server": "1.19.9",
     "@types/aws-lambda": "8.10.161",
     "@types/node": "22.x",

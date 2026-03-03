@@ -1,0 +1,32 @@
+/**
+ * Build-time script that generates `dist/openapi.json` from the {{moduleName}}
+ * service OpenAPI registry.
+ *
+ * Run from the service root:
+ *   node --import tsx/esm src/generate-spec.ts
+ * or via the `generate:spec` npm script after building:
+ *   node dist/generate-spec.js
+ */
+
+import { mkdirSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { OpenApiGeneratorV31 } from "@asteasolutions/zod-to-openapi";
+import { registry } from "./openapi.js";
+
+const generator = new OpenApiGeneratorV31(registry.definitions);
+
+const doc = generator.generateDocument({
+  openapi: "3.1.0",
+  info: {
+    title: "{{EntityName}} Service API",
+    version: "1.0.0",
+  },
+});
+
+const outDir = resolve("dist");
+const outFile = resolve(outDir, "openapi.json");
+
+mkdirSync(outDir, { recursive: true });
+writeFileSync(outFile, JSON.stringify(doc, null, 2));
+
+console.log(`OpenAPI spec written to ${outFile}`);
