@@ -36,13 +36,26 @@
 - Phase 4: `!this.stage === "prod"` operator precedence bug; `source-map-support/register` missing dep
 - Phase 5: auth-stack hardcodes memorySize/timeout; SUBDIR_TEMPLATE_DIRS comment stale; e2e title mismatch
 - Phase 6: `--require-approval never` in prod deploy; SNS fallback to example.com; database-client missing vitest.config.ts
+- Module gen: missing input validation on moduleName before code injection; no duplicate-injection guard
+
+## Module Injection System
+- Markers: `// @module-inject:import`, `// @module-inject:instance`, `// @module-inject:route`
+- `injectBeforeMarker()` inserts line before marker, preserves marker for future injections
+- Marker indentation is applied to injected line
+- Generated infra imports omit `.js` extension (different tsconfig from CLI tool)
+- NO_FEATURES const satisfies copyDir signature for module templates (no @feature lines)
 
 ## File Layout
 - `src/scaffolder.ts` -- core scaffolding engine, SUBDIR_TEMPLATE_DIRS set
+- `src/module-generator.ts` -- module generator; copies templates/generators/module/, injects into infra+gateway
+- `src/module-helpers.ts` -- toPascalCase, toEntityName, getModuleVariableMap, injectBeforeMarker
+- `src/module-context.ts` -- detectProjectContext, readProjectName, scanNextPort
 - `src/template-helpers.ts` -- getTemplateDirs, getVariableMap, getWorkspaceEntries
 - `src/utils/fs.ts` -- copyDir, renameFile, replaceVariables, processConditionals
+- `src/utils/paths.ts` -- resolveTemplateRoot, pathExists
 - `templates/infra/src/stacks/base-stack.ts` -- ServiceStack base class
 - `templates/infra/src/index.ts.hbs` -- CDK app entry; `// @feature:X` gates stack imports/instantiations
+- `templates/generators/` -- module generator templates (module/, infra-stack/)
 
 ## Template Merge Behavior
 - SUBDIR_TEMPLATE_DIRS: services, infra, dev-gateway, packages, frontend, auth, e2e
