@@ -163,6 +163,6 @@ export function localAuth(): MiddlewareHandler {
 
     // Code path 4: valid JWT — set claims and continue.
     c.set("authorizerClaims", claims);
-    await next();
+    return await next();
   };
 }
