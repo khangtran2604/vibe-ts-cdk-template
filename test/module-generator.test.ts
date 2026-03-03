@@ -893,3 +893,401 @@ describe("generateModule — unprotected endpoints (default)", () => {
     expect(stackContent).not.toContain("authorizer,");
   });
 });
+
+// ---------------------------------------------------------------------------
+// localAuth middleware — generated app.ts (all endpoints protected)
+// ---------------------------------------------------------------------------
+
+describe("generateModule — app.ts localAuth (all endpoints protected)", () => {
+  it("should import localAuth from the lambda-utils package when all endpoints are protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).toContain('import { localAuth } from "@test-app/lambda-utils"');
+  });
+
+  it("should declare the auth constant when all endpoints are protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).toContain("const auth = localAuth();");
+  });
+
+  it("should prefix every route handler with auth middleware when all endpoints are protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    // All 5 route registrations must use the auth middleware.
+    const authMiddlewareOccurrences = (appContent.match(/auth, lambdaToHono\(/g) ?? []).length;
+    expect(authMiddlewareOccurrences).toBe(5);
+  });
+
+  it("should not leave any {{localAuthImport}} placeholder when all endpoints are protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).not.toContain("{{localAuthImport}}");
+  });
+
+  it("should not leave any {{localAuthConst}} placeholder when all endpoints are protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).not.toContain("{{localAuthConst}}");
+  });
+
+  it("should not leave any {{xxxAuthMiddleware}} placeholder when all endpoints are protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: true,
+          get: true,
+          create: true,
+          update: true,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).not.toMatch(/\{\{\w+AuthMiddleware\}\}/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// localAuth middleware — generated app.ts (no endpoints protected)
+// ---------------------------------------------------------------------------
+
+describe("generateModule — app.ts localAuth (no endpoints protected)", () => {
+  it("should NOT import localAuth when protectedEndpoints is omitted", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).not.toContain("localAuth");
+  });
+
+  it("should NOT declare the auth constant when protectedEndpoints is omitted", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).not.toContain("const auth = localAuth()");
+  });
+
+  it("should use bare lambdaToHono() calls without auth prefix when protectedEndpoints is omitted", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    // No route should have the auth middleware prefix.
+    expect(appContent).not.toContain("auth, lambdaToHono(");
+  });
+
+  it("should contain bare lambdaToHono(createOrderItem) without auth prefix when protectedEndpoints is omitted", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).toContain("lambdaToHono(createOrderItem)");
+  });
+
+  it("should NOT import localAuth when all protectedEndpoints flags are false", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: false,
+          update: false,
+          delete: false,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).not.toContain("localAuth");
+  });
+
+  it("should not leave any residual placeholder tokens when protectedEndpoints is omitted", async () => {
+    await generateModule(makeConfig(tempDir));
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).not.toMatch(/\{\{localAuth\w*\}\}/);
+    expect(appContent).not.toMatch(/\{\{\w+AuthMiddleware\}\}/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// localAuth middleware — generated app.ts (mixed protection)
+// ---------------------------------------------------------------------------
+
+describe("generateModule — app.ts localAuth (mixed protection: create and delete only)", () => {
+  it("should import localAuth when at least one endpoint is protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: true,
+          update: false,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).toContain('import { localAuth } from "@test-app/lambda-utils"');
+  });
+
+  it("should declare the auth constant when at least one endpoint is protected", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: true,
+          update: false,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).toContain("const auth = localAuth();");
+  });
+
+  it("should prefix the app.post (create) route with auth middleware", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: true,
+          update: false,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).toContain("auth, lambdaToHono(createOrderItem)");
+  });
+
+  it("should prefix the app.delete route with auth middleware", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: true,
+          update: false,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).toContain("auth, lambdaToHono(deleteOrderItem)");
+  });
+
+  it("should NOT prefix the app.get (single item) route with auth middleware", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: true,
+          update: false,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    // The get route should use bare lambdaToHono without auth prefix.
+    expect(appContent).toContain("lambdaToHono(getOrderItem)");
+    expect(appContent).not.toContain("auth, lambdaToHono(getOrderItem)");
+  });
+
+  it("should NOT prefix the app.put (update) route with auth middleware", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: true,
+          update: false,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).toContain("lambdaToHono(updateOrderItem)");
+    expect(appContent).not.toContain("auth, lambdaToHono(updateOrderItem)");
+  });
+
+  it("should NOT prefix the app.get (list) route with auth middleware", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: true,
+          update: false,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).toContain("lambdaToHono(listOrderItems)");
+    expect(appContent).not.toContain("auth, lambdaToHono(listOrderItems)");
+  });
+
+  it("should produce exactly 2 auth-prefixed route calls for create+delete mixed protection", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: true,
+          update: false,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    const authMiddlewareOccurrences = (appContent.match(/auth, lambdaToHono\(/g) ?? []).length;
+    expect(authMiddlewareOccurrences).toBe(2);
+  });
+
+  it("should not leave any residual placeholder tokens in mixed-protection app.ts", async () => {
+    await generateModule(
+      makeConfig(tempDir, {
+        protectedEndpoints: {
+          list: false,
+          get: false,
+          create: true,
+          update: false,
+          delete: true,
+        },
+      })
+    );
+
+    const appContent = await readFile(
+      join(tempDir, "services", "order-items", "src", "app.ts"),
+      "utf8"
+    );
+    expect(appContent).not.toMatch(/\{\{localAuth\w*\}\}/);
+    expect(appContent).not.toMatch(/\{\{\w+AuthMiddleware\}\}/);
+  });
+});
