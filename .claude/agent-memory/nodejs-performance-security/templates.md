@@ -80,3 +80,27 @@ See MEMORY.md for summary. Full conventions documented here.
 - Bundling: `externalModules: ["@aws-sdk/*"]`, minify only in prod, sourceMap only in non-prod.
 - CfnOutput exportName pattern: `{{projectName}}-<OutputName>-${this.stage}`.
 - Auth stack CDK entry path for Lambda: `../../../../auth/src/authorizer.ts` (relative to `__dirname` inside `infra/src/stacks/modules/`).
+
+## module-prompts.ts patterns
+
+### clack.multiselect generic typing
+`clack.multiselect<T>` is generic; pass the union type explicitly so TypeScript
+narrows the return from `T[] | symbol` correctly:
+```typescript
+const selected = await clack.multiselect<"list" | "get" | "create" | "update" | "delete">({
+  ...
+  required: true,
+});
+handleCancel(selected);
+const selections = selected as Array<"list" | "get" | "create" | "update" | "delete">;
+```
+`required: true` on multiselect prevents the user submitting zero items.
+
+### --protected flag flow in runModulePrompts
+1. Auth check runs AFTER project context detection (step 3) — calls `detectAuthSupport(projectDir)`.
+2. Endpoint selection (step 5) runs BEFORE the summary note (step 6) so the summary can
+   include the protected endpoints line.
+3. With `-y` all 5 endpoints set to `true` with no prompt.
+4. Without `--protected`, `protectedEndpoints` stays `undefined` in the returned config —
+   no auth resources generated (matches `ModuleConfig.protectedEndpoints?` being optional).
+5. Summary line: `Protected    : list, get, create, update, delete` (or subset, or "(none)").

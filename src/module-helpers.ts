@@ -134,7 +134,13 @@ export function getModuleVariableMap(config: ModuleConfig): Record<string, strin
  */
 function authMethodOptions(isProtected?: boolean): string {
   if (!isProtected) return "";
-  return `, {\n      authorizer,\n      authorizationType: apigateway.AuthorizationType.CUSTOM,\n    }`;
+  return [
+    ",",
+    "      {",
+    "        authorizer,",
+    "        authorizationType: apigateway.AuthorizationType.CUSTOM,",
+    "      }",
+  ].join("\n");
 }
 
 /**

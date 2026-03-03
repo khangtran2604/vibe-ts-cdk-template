@@ -10,7 +10,7 @@
 | Phase | Title | Tasks | Completed | Status |
 |-------|-------|-------|-----------|--------|
 | 1 | Core Types and Helpers | 3 | 3 | ✅ Complete |
-| 2 | Template and CLI Integration | 3 | 0 | ⬜ Not Started |
+| 2 | Template and CLI Integration | 3 | 3 | ✅ Complete |
 | 3 | Testing and Verification | 4 | 0 | ⬜ Not Started |
 
 ## Dependency Graph Summary

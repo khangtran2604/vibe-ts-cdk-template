@@ -129,32 +129,32 @@ export class {{ModuleName}}Stack extends ServiceStack {
           "X-Requested-With",
         ],
       },
-    });
+    });{{authorizerSetup}}
 
     // /{{moduleName}}
     const {{entityNameLower}}Resource = api.root.addResource("{{moduleName}}");
     {{entityNameLower}}Resource.addMethod(
       "GET",
-      new apigateway.LambdaIntegration(list{{ModuleName}}Fn, { proxy: true })
+      new apigateway.LambdaIntegration(list{{ModuleName}}Fn, { proxy: true }){{listAuthOptions}}
     );
     {{entityNameLower}}Resource.addMethod(
       "POST",
-      new apigateway.LambdaIntegration(create{{EntityName}}Fn, { proxy: true })
+      new apigateway.LambdaIntegration(create{{EntityName}}Fn, { proxy: true }){{createAuthOptions}}
     );
 
     // /{{moduleName}}/{id}
     const {{entityNameLower}}ByIdResource = {{entityNameLower}}Resource.addResource("{id}");
     {{entityNameLower}}ByIdResource.addMethod(
       "GET",
-      new apigateway.LambdaIntegration(get{{EntityName}}Fn, { proxy: true })
+      new apigateway.LambdaIntegration(get{{EntityName}}Fn, { proxy: true }){{getAuthOptions}}
     );
     {{entityNameLower}}ByIdResource.addMethod(
       "PUT",
-      new apigateway.LambdaIntegration(update{{EntityName}}Fn, { proxy: true })
+      new apigateway.LambdaIntegration(update{{EntityName}}Fn, { proxy: true }){{updateAuthOptions}}
     );
     {{entityNameLower}}ByIdResource.addMethod(
       "DELETE",
-      new apigateway.LambdaIntegration(delete{{EntityName}}Fn, { proxy: true })
+      new apigateway.LambdaIntegration(delete{{EntityName}}Fn, { proxy: true }){{deleteAuthOptions}}
     );
 
     // -------------------------------------------------------------------------

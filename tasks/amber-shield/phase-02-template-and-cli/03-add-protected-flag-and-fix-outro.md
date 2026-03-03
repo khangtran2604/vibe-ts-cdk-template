@@ -43,4 +43,4 @@ const baseSteps = config.installDeps
 Low -- Two small, well-defined changes in a single file.
 
 ## Status
-- [ ] Not Started
+- [x] Complete

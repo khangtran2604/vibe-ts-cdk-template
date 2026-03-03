@@ -14,12 +14,13 @@
 import * as clack from "@clack/prompts";
 import { join } from "node:path";
 import {
+  detectAuthSupport,
   detectProjectContext,
   readProjectName,
   scanNextPort,
 } from "./module-context.js";
 import { toEntityName } from "./module-helpers.js";
-import type { ModuleConfig } from "./types.js";
+import type { ModuleConfig, ProtectedEndpoints } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -94,7 +95,7 @@ function handleCancel(value: unknown): void {
  */
 export async function runModulePrompts(
   name: string,
-  flags: { yes?: boolean; install?: boolean },
+  flags: { yes?: boolean; install?: boolean; protected?: boolean },
 ): Promise<ModuleConfig> {
   const skipAll = flags.yes === true;
 
@@ -147,27 +148,95 @@ export async function runModulePrompts(
   }
 
   // -------------------------------------------------------------------------
-  // 3. Derive entity name and resolve target directory
+  // 3. Validate auth support when --protected is set
+  // -------------------------------------------------------------------------
+  if (flags.protected) {
+    const hasAuth = await detectAuthSupport(projectDir);
+    if (!hasAuth) {
+      clack.log.error(
+        "This project does not have auth support. " +
+          "Re-scaffold with the standard or full preset to enable Cognito auth, " +
+          "then run this command again.",
+      );
+      process.exit(1);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // 4. Derive entity name and resolve target directory
   // -------------------------------------------------------------------------
   const entityName = toEntityName(moduleName);
   const targetDir = join(projectDir, "services", moduleName);
 
   // -------------------------------------------------------------------------
-  // 4. Show summary
+  // 5. Select protected endpoints (only when --protected is set)
   // -------------------------------------------------------------------------
-  clack.note(
-    [
-      `Module name  : ${moduleName}`,
-      `Entity name  : ${entityName}`,
-      `Port         : ${port}`,
-      `Target dir   : ${targetDir}`,
-      `Project      : ${projectName}`,
-    ].join("\n"),
-    "Module to be generated",
-  );
+  let protectedEndpoints: ProtectedEndpoints | undefined;
+
+  if (flags.protected) {
+    if (skipAll) {
+      // -y: protect all endpoints without prompting.
+      protectedEndpoints = {
+        list: true,
+        get: true,
+        create: true,
+        update: true,
+        delete: true,
+      };
+    } else {
+      const selected = await clack.multiselect<
+        "list" | "get" | "create" | "update" | "delete"
+      >({
+        message: "Which endpoints should require authentication?",
+        options: [
+          { value: "list", label: "GET / (list)", hint: "List all" },
+          { value: "get", label: "GET /:id (get)", hint: "Get by ID" },
+          { value: "create", label: "POST / (create)", hint: "Create" },
+          { value: "update", label: "PUT /:id (update)", hint: "Update" },
+          { value: "delete", label: "DELETE /:id (delete)", hint: "Delete" },
+        ],
+        initialValues: ["list", "get", "create", "update", "delete"],
+        required: true,
+      });
+      handleCancel(selected);
+      const selections = selected as Array<
+        "list" | "get" | "create" | "update" | "delete"
+      >;
+      protectedEndpoints = {
+        list: selections.includes("list"),
+        get: selections.includes("get"),
+        create: selections.includes("create"),
+        update: selections.includes("update"),
+        delete: selections.includes("delete"),
+      };
+    }
+  }
 
   // -------------------------------------------------------------------------
-  // 5. Install deps
+  // 6. Show summary
+  // -------------------------------------------------------------------------
+  const summaryLines = [
+    `Module name  : ${moduleName}`,
+    `Entity name  : ${entityName}`,
+    `Port         : ${port}`,
+    `Target dir   : ${targetDir}`,
+    `Project      : ${projectName}`,
+  ];
+
+  if (protectedEndpoints !== undefined) {
+    const pe = protectedEndpoints;
+    const enabledEndpoints = (
+      ["list", "get", "create", "update", "delete"] as const
+    )
+      .filter((ep) => pe[ep])
+      .join(", ");
+    summaryLines.push(`Protected    : ${enabledEndpoints || "(none)"}`);
+  }
+
+  clack.note(summaryLines.join("\n"), "Module to be generated");
+
+  // -------------------------------------------------------------------------
+  // 7. Install deps
   // -------------------------------------------------------------------------
   let installDeps: boolean;
 
@@ -185,7 +254,7 @@ export async function runModulePrompts(
   }
 
   // -------------------------------------------------------------------------
-  // 6. Assemble and return config
+  // 8. Assemble and return config
   // -------------------------------------------------------------------------
   return {
     moduleName,
@@ -194,5 +263,6 @@ export async function runModulePrompts(
     projectDir,
     projectName,
     installDeps,
+    protectedEndpoints,
   };
 }

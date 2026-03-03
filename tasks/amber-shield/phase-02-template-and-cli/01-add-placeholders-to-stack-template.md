@@ -38,4 +38,4 @@ The `{{authorizerSetup}}` block should be on its own line(s) so it cleanly disap
 Medium -- Requires careful placement to avoid formatting issues in both protected and unprotected cases.
 
 ## Status
-- [ ] Not Started
+- [x] Complete

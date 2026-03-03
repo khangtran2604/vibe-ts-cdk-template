@@ -120,8 +120,8 @@ export function createProgram(): Command {
       // When --no-install was used, remind the user to run pnpm install first.
       // When the preset is "full", e2e tests are available so pnpm test is included.
       const baseSteps = config.installDeps
-        ? [`  cd ${config.projectName}`, `  pnpm dev`]
-        : [`  cd ${config.projectName}`, `  pnpm install`, `  pnpm dev`];
+        ? [`  cd ${config.projectName}`, `  pnpm build`, `  pnpm dev`]
+        : [`  cd ${config.projectName}`, `  pnpm install`, `  pnpm build`, `  pnpm dev`];
 
       if (config.preset === "full") {
         baseSteps.push(`  pnpm test`);
@@ -140,8 +140,9 @@ export function createProgram(): Command {
     .description("Generate a new CRUD service module in an existing project")
     .argument("<name>", "Module name in kebab-case (e.g., orders, order-items)")
     .option("--no-install", "Skip pnpm install after generation")
+    .option("--protected", "Protect endpoints with Cognito authorizer", false)
     .option("-y, --yes", "Accept all defaults", false)
-    .action(async (name: string, options: { install: boolean; yes: boolean }) => {
+    .action(async (name: string, options: { install: boolean; protected: boolean; yes: boolean }) => {
       try {
         const config = await runModulePrompts(name, options);
 

@@ -52,4 +52,4 @@ Convert the selected array into a `ProtectedEndpoints` object.
 Medium -- Multiple code paths (flag absent, flag + auto, flag + interactive, flag + no auth dir).
 
 ## Status
-- [ ] Not Started
+- [x] Complete
