@@ -1,0 +1,192 @@
+/**
+ * Integration tests for the {{moduleName}} API.
+ *
+ * These tests exercise the full request/response cycle through the Hono app
+ * (which wraps the Lambda handlers via `lambdaToHono`).  supertest drives an
+ * in-process HTTP server bound to an ephemeral port — no external server is
+ * needed.
+ *
+ * Each suite clears the in-memory store so tests are fully isolated.
+ */
+
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import request from "supertest";
+import type { Server } from "node:http";
+import { serve } from "@hono/node-server";
+import { app } from "../../src/app.js";
+import { {{flatLower}} } from "../../src/store.js";
+
+// One server per test — bound to port 0 (OS assigns an ephemeral port).
+let server: Server;
+
+beforeEach(() => {
+  {{flatLower}}.clear();
+  server = serve({ fetch: app.fetch, port: 0 });
+});
+
+afterEach(() => {
+  server.close();
+});
+
+// ---------------------------------------------------------------------------
+// POST /{{moduleName}} — create
+// ---------------------------------------------------------------------------
+
+describe("POST /{{moduleName}}", () => {
+  it("creates a {{entityNameLower}} and returns 201", async () => {
+    const res = await request(server)
+      .post("/{{moduleName}}")
+      .send({ name: "Test {{EntityName}}" })
+      .set("Content-Type", "application/json");
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.name).toBe("Test {{EntityName}}");
+    expect(typeof res.body.data.id).toBe("string");
+    expect(res.body.data.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+  });
+
+  it("returns 400 when name is missing", async () => {
+    const res = await request(server)
+      .post("/{{moduleName}}")
+      .send({})
+      .set("Content-Type", "application/json");
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns 400 when body is absent", async () => {
+    const res = await request(server).post("/{{moduleName}}");
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe("BAD_REQUEST");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /{{moduleName}}/:id — get single {{entityNameLower}}
+// ---------------------------------------------------------------------------
+
+describe("GET /{{moduleName}}/:id", () => {
+  it("returns 200 with the {{entityNameLower}} when it exists", async () => {
+    const createRes = await request(server)
+      .post("/{{moduleName}}")
+      .send({ name: "Fetch Me" })
+      .set("Content-Type", "application/json");
+
+    const id = createRes.body.data.id as string;
+    const getRes = await request(server).get(`/{{moduleName}}/${id}`);
+
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.success).toBe(true);
+    expect(getRes.body.data.id).toBe(id);
+    expect(getRes.body.data.name).toBe("Fetch Me");
+  });
+
+  it("returns 404 when the {{entityNameLower}} does not exist", async () => {
+    const res = await request(server).get("/{{moduleName}}/non-existent-id");
+
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe("NOT_FOUND");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /{{moduleName}} — list
+// ---------------------------------------------------------------------------
+
+describe("GET /{{moduleName}}", () => {
+  it("returns 200 with an empty list when no {{moduleName}} exist", async () => {
+    const res = await request(server).get("/{{moduleName}}");
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.items).toEqual([]);
+    expect(res.body.data.pagination.total).toBe(0);
+    expect(res.body.data.pagination.hasMore).toBe(false);
+  });
+
+  it("returns all created {{moduleName}}", async () => {
+    await request(server)
+      .post("/{{moduleName}}")
+      .send({ name: "First {{EntityName}}" })
+      .set("Content-Type", "application/json");
+
+    await request(server)
+      .post("/{{moduleName}}")
+      .send({ name: "Second {{EntityName}}" })
+      .set("Content-Type", "application/json");
+
+    const res = await request(server).get("/{{moduleName}}");
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toHaveLength(2);
+    expect(res.body.data.pagination.total).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PUT /{{moduleName}}/:id — update
+// ---------------------------------------------------------------------------
+
+describe("PUT /{{moduleName}}/:id", () => {
+  it("updates a {{entityNameLower}} and returns 200", async () => {
+    const createRes = await request(server)
+      .post("/{{moduleName}}")
+      .send({ name: "Original Name" })
+      .set("Content-Type", "application/json");
+
+    const id = createRes.body.data.id as string;
+
+    const updateRes = await request(server)
+      .put(`/{{moduleName}}/${id}`)
+      .send({ name: "Updated Name" })
+      .set("Content-Type", "application/json");
+
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.success).toBe(true);
+    expect(updateRes.body.data.name).toBe("Updated Name");
+  });
+
+  it("returns 404 when updating a non-existent {{entityNameLower}}", async () => {
+    const res = await request(server)
+      .put("/{{moduleName}}/ghost-id")
+      .send({ name: "Ghost" })
+      .set("Content-Type", "application/json");
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("NOT_FOUND");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /{{moduleName}}/:id
+// ---------------------------------------------------------------------------
+
+describe("DELETE /{{moduleName}}/:id", () => {
+  it("deletes a {{entityNameLower}} and returns 204", async () => {
+    const createRes = await request(server)
+      .post("/{{moduleName}}")
+      .send({ name: "To Delete" })
+      .set("Content-Type", "application/json");
+
+    const id = createRes.body.data.id as string;
+    const delRes = await request(server).delete(`/{{moduleName}}/${id}`);
+
+    expect(delRes.status).toBe(204);
+    expect({{flatLower}}.has(id)).toBe(false);
+  });
+
+  it("returns 404 when deleting a non-existent {{entityNameLower}}", async () => {
+    const res = await request(server).delete("/{{moduleName}}/does-not-exist");
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("NOT_FOUND");
+  });
+});

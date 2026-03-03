@@ -1,0 +1,132 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { createMockEvent } from "@{{projectName}}/lambda-utils";
+import { handler } from "../handlers/create.js";
+import { {{flatLower}} } from "../store.js";
+
+// Clear the in-memory store before each test so tests are isolated.
+beforeEach(() => {
+  {{flatLower}}.clear();
+});
+
+describe("create-{{entityNameLower}} handler", () => {
+  it("returns statusCode 201 when given a valid body", async () => {
+    const event = createMockEvent({
+      httpMethod: "POST",
+      path: "/{{moduleName}}",
+      body: JSON.stringify({ name: "Test {{EntityName}}" }),
+    });
+
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(201);
+  });
+
+  it("returns a {{entityNameLower}} object with generated id and timestamps", async () => {
+    const event = createMockEvent({
+      httpMethod: "POST",
+      path: "/{{moduleName}}",
+      body: JSON.stringify({ name: "Sample {{EntityName}}" }),
+    });
+
+    const result = await handler(event);
+    const body = JSON.parse(result.body) as {
+      success: boolean;
+      data: { id: string; name: string; createdAt: string; updatedAt: string };
+    };
+
+    expect(body.success).toBe(true);
+    expect(typeof body.data.id).toBe("string");
+    expect(body.data.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+    expect(body.data.name).toBe("Sample {{EntityName}}");
+    expect(typeof body.data.createdAt).toBe("string");
+    expect(typeof body.data.updatedAt).toBe("string");
+  });
+
+  it("trims whitespace from name", async () => {
+    const event = createMockEvent({
+      httpMethod: "POST",
+      path: "/{{moduleName}}",
+      body: JSON.stringify({ name: "  Padded Name  " }),
+    });
+
+    const result = await handler(event);
+    const body = JSON.parse(result.body) as { data: { name: string } };
+
+    expect(body.data.name).toBe("Padded Name");
+  });
+
+  it("persists the {{entityNameLower}} in the in-memory store", async () => {
+    const event = createMockEvent({
+      httpMethod: "POST",
+      path: "/{{moduleName}}",
+      body: JSON.stringify({ name: "Persisted {{EntityName}}" }),
+    });
+
+    const result = await handler(event);
+    const body = JSON.parse(result.body) as { data: { id: string } };
+
+    expect({{flatLower}}.has(body.data.id)).toBe(true);
+  });
+
+  it("sets Content-Type: application/json header", async () => {
+    const event = createMockEvent({
+      httpMethod: "POST",
+      path: "/{{moduleName}}",
+      body: JSON.stringify({ name: "Header Test" }),
+    });
+
+    const result = await handler(event);
+
+    expect(result.headers?.["Content-Type"]).toBe("application/json");
+  });
+
+  it("returns 400 when body is absent", async () => {
+    const event = createMockEvent({
+      httpMethod: "POST",
+      path: "/{{moduleName}}",
+      body: null,
+    });
+
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("BAD_REQUEST");
+  });
+
+  it("returns 400 when name is missing", async () => {
+    const event = createMockEvent({
+      httpMethod: "POST",
+      path: "/{{moduleName}}",
+      body: JSON.stringify({}),
+    });
+
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body) as {
+      success: boolean;
+      error: { code: string; fieldErrors?: Record<string, string> };
+    };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.fieldErrors?.["name"]).toBeDefined();
+  });
+
+  it("returns 400 when body is not valid JSON", async () => {
+    const event = createMockEvent({
+      httpMethod: "POST",
+      path: "/{{moduleName}}",
+      body: "not-json{",
+    });
+
+    const result = await handler(event);
+
+    expect(result.statusCode).toBe(400);
+    const body = JSON.parse(result.body) as { error: { code: string } };
+    expect(body.error.code).toBe("BAD_REQUEST");
+  });
+});

@@ -1,0 +1,111 @@
+/**
+ * Update-{{entityNameLower}} Lambda handler.
+ *
+ * This is the primary production entry point deployed to AWS Lambda.
+ * It has zero framework dependencies — only the aws-lambda types (dev-only).
+ *
+ * PUT /{{moduleName}}/:id
+ * Body: { name?: string }
+ *
+ * Responses:
+ *   200 — {{entityNameLower}} updated successfully
+ *   400 — id missing or body is malformed
+ *   404 — {{entityNameLower}} not found
+ */
+
+import type {
+  APIGatewayProxyEvent,
+  APIGatewayProxyResult,
+} from "aws-lambda";
+import type { Update{{EntityName}}Body } from "../types/index.js";
+import { {{entityNameLower}}Repository } from "../db/repository.js";
+
+const HEADERS = { "Content-Type": "application/json" } as const;
+
+/**
+ * Handles PUT /{{moduleName}}/:id — applies a partial update to an existing {{entityNameLower}}.
+ *
+ * @param event - API Gateway proxy event.
+ * @returns 200 with updated {{entityNameLower}}, 404 if not found, or 400 if invalid.
+ */
+export async function handler(
+  event: APIGatewayProxyEvent
+): Promise<APIGatewayProxyResult> {
+  const id = event.pathParameters?.["id"];
+
+  if (!id) {
+    return {
+      statusCode: 400,
+      headers: HEADERS,
+      body: JSON.stringify({
+        success: false,
+        error: {
+          code: "BAD_REQUEST",
+          message: "Path parameter 'id' is required",
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    };
+  }
+
+  // Parse request body.
+  let body: Update{{EntityName}}Body;
+  try {
+    if (!event.body) {
+      throw new Error("Request body is required");
+    }
+    body = JSON.parse(event.body) as Update{{EntityName}}Body;
+  } catch {
+    return {
+      statusCode: 400,
+      headers: HEADERS,
+      body: JSON.stringify({
+        success: false,
+        error: {
+          code: "BAD_REQUEST",
+          message: "Request body must be valid JSON",
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    };
+  }
+
+  const existing = await {{entityNameLower}}Repository.findById(id);
+
+  if (!existing) {
+    return {
+      statusCode: 404,
+      headers: HEADERS,
+      body: JSON.stringify({
+        success: false,
+        error: {
+          code: "NOT_FOUND",
+          message: `{{EntityName}} with id '${id}' not found`,
+        },
+        timestamp: new Date().toISOString(),
+      }),
+    };
+  }
+
+  // Apply only the provided fields.
+  const updated = {
+    ...existing,
+    ...(typeof body.name === "string" && body.name.trim() !== ""
+      ? { name: body.name.trim() }
+      : {}),
+    updatedAt: new Date().toISOString(),
+  };
+
+  await {{entityNameLower}}Repository.update(id, updated);
+
+  return {
+    statusCode: 200,
+    headers: HEADERS,
+    body: JSON.stringify({
+      success: true,
+      data: updated,
+      message: "{{EntityName}} updated successfully",
+      timestamp: updated.updatedAt,
+    }),
+  };
+}

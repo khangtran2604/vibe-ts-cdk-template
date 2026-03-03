@@ -24,6 +24,7 @@ import type { IncomingMessage, ServerResponse, ClientRequest } from "node:http";
 const ROUTES: Record<string, string> = {
   "/health": "http://localhost:3001",
   "/users": "http://localhost:3002",
+  // @module-inject:route
 };
 
 const GATEWAY_PORT = 3000;
